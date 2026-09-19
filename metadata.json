@@ -1,0 +1,6 @@
+{
+  "name": "AddMeUp",
+  "description": "A social network exchange where everyday people and local businesses share Snapchat handles or WhatsApp numbers to get new followers, friends, or customers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

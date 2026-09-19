@@ -1,0 +1,22 @@
+{
+  "name": "AddMeUp - Social Handles & Business Ads",
+  "short_name": "AddMeUp",
+  "description": "Share your Snapchat handle or WhatsApp number to get new followers, friends, or customers.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
