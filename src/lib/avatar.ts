@@ -228,3 +228,206 @@ export async function compressImageFile(
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Curated high-aesthetic cover banners for social ads.
+ */
+export interface PresetCoverBanner {
+  id: string;
+  name: string;
+  category: string;
+  url: string;
+}
+
+export const PRESET_COVER_BANNERS: PresetCoverBanner[] = [
+  {
+    id: 'friends-vibes',
+    name: 'Social & Friends',
+    category: 'Friends',
+    url: 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 'snap-streaks',
+    name: 'Snap Streaks Flame',
+    category: 'Friends',
+    url: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 'streetwear-fashion',
+    name: 'Fashion & Style',
+    category: 'Fashion',
+    url: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 'tech-developer',
+    name: 'Tech & Gaming',
+    category: 'Tech',
+    url: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 'modern-business',
+    name: 'Store & Commerce',
+    category: 'Business',
+    url: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=900&q=80',
+  },
+  {
+    id: 'pro-services',
+    name: 'Professional Services',
+    category: 'Services',
+    url: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80',
+  },
+];
+
+/**
+ * Returns the effective cover photo/banner for an ad.
+ * Supports custom uploaded images or falls back to category-tuned banners.
+ */
+export function getEffectiveAdCover(ad: {
+  imageUrl?: string | null;
+  category?: string;
+  platform?: string;
+  adId?: string;
+}): string {
+  if (ad.imageUrl && ad.imageUrl.trim().length > 0) {
+    return ad.imageUrl.trim();
+  }
+
+  const covers: Record<string, string> = {
+    'Friends': 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=900&q=80',
+    'Business': 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=900&q=80',
+    'Tech': 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=900&q=80',
+    'Fashion': 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=900&q=80',
+    'Services': 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80',
+  };
+
+  return covers[ad.category || 'Friends'] || covers['Friends'];
+}
+
+/**
+ * Generates an appealing description if older ads did not have one saved.
+ */
+export function getEffectiveAdDescription(ad: {
+  description?: string | null;
+  category?: string;
+  platform?: string;
+}): string {
+  if (ad.description && ad.description.trim().length > 0) {
+    return ad.description.trim();
+  }
+
+  const isSnap = ad.platform === 'snapchat';
+  switch (ad.category) {
+    case 'Business':
+      return isSnap
+        ? 'Browse our latest arrivals, exclusive snap deals, and place orders directly. Tap to add and view our daily story catalog!'
+        : 'Chat directly on WhatsApp for customer orders, instant quotes, price inquiries, and fast support.';
+    case 'Tech':
+      return isSnap
+        ? 'Sharing daily tech hacks, coding snippets, and gadget setups on Snapchat stories. Add me to connect!'
+        : 'Connect on WhatsApp for tech consultations, developer networking, and project inquiries.';
+    case 'Fashion':
+      return isSnap
+        ? 'Daily outfit drops, styling inspo, and thrift deals on my Snap story. Let’s connect and trade fits!'
+        : 'Message on WhatsApp to browse our latest fashion collection, verify sizes, and place fast delivery orders.';
+    case 'Services':
+      return isSnap
+        ? 'Follow my service journey, portfolio highlights, and behind-the-scenes on Snapchat stories.'
+        : 'Book appointments, request quotes, and chat directly with our professional team on WhatsApp.';
+    case 'Friends':
+    default:
+      return isSnap
+        ? 'Looking for active daily streaks, fun snap exchanges, and friendly vibes! Send a snap to get started 🔥'
+        : 'Connecting with new friends and active groups on WhatsApp. Say hello and let’s chat!';
+  }
+}
+
+/**
+ * Compresses an uploaded cover banner image to 600x340px (16:9 ratio).
+ * Keeps file size ultra-compact (~20-25 KB) so it stores inside Firestore for free.
+ */
+export async function compressCoverImageFile(
+  file: File,
+  targetWidth = 640,
+  targetHeight = 360,
+  quality = 0.75
+): Promise<{ dataUrl: string; sizeKb: number }> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      return reject(new Error('Please select a valid image file (JPG, PNG, WebP).'));
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Failed to parse image.'));
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            return reject(new Error('Failed to initialize canvas context.'));
+          }
+
+          // Center crop to 16:9 ratio
+          const srcW = img.naturalWidth || img.width;
+          const srcH = img.naturalHeight || img.height;
+          const targetAspect = targetWidth / targetHeight;
+          const srcAspect = srcW / srcH;
+
+          let cropW = srcW;
+          let cropH = srcH;
+          let cropX = 0;
+          let cropY = 0;
+
+          if (srcAspect > targetAspect) {
+            // Source is wider than target
+            cropW = srcH * targetAspect;
+            cropX = (srcW - cropW) / 2;
+          } else {
+            // Source is taller than target
+            cropH = srcW / targetAspect;
+            cropY = (srcH - cropH) / 2;
+          }
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+
+          ctx.drawImage(
+            img,
+            cropX,
+            cropY,
+            cropW,
+            cropH,
+            0,
+            0,
+            targetWidth,
+            targetHeight
+          );
+
+          let dataUrl = canvas.toDataURL('image/webp', quality);
+          if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+
+          const approxBytes = Math.round((dataUrl.length * 3) / 4);
+          const sizeKb = Math.round((approxBytes / 1024) * 10) / 10;
+
+          resolve({
+            dataUrl,
+            sizeKb,
+          });
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      img.src = event.target?.result as string;
+    };
+
+    reader.readAsDataURL(file);
+  });
+}

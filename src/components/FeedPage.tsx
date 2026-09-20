@@ -17,14 +17,8 @@ import { db } from '../lib/firebase';
 import { 
   Search, 
   PlusCircle, 
-  Filter, 
   RefreshCw, 
-  Rocket, 
-  Sparkles, 
-  Gift, 
-  Flame, 
-  LayoutDashboard,
-  Check
+  Rocket 
 } from 'lucide-react';
 import { triggerHaptic } from '../lib/device';
 
@@ -60,11 +54,6 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   const [selectedAdForModal, setSelectedAdForModal] = useState<Ad | null>(null);
   const [selectedAdForReport, setSelectedAdForReport] = useState<Ad | null>(null);
   const [selectedAdForBoost, setSelectedAdForBoost] = useState<Ad | null>(null);
-
-  // Check today's bonus claim status
-  const todayStr = new Date().toISOString().split('T')[0];
-  const isDailyBonusClaimed = profile?.lastDailyBonusDate === todayStr;
-  const currentStreak = Number(profile?.dailyStreak || 0);
 
   // 1. Fetch live active ads
   useEffect(() => {
@@ -134,10 +123,6 @@ export const FeedPage: React.FC<FeedPageProps> = ({
     'Travel'
   ];
 
-  // User's own ads count and views
-  const myAds = userUid ? ads.filter((a) => a.userId === userUid) : [];
-  const myTotalViews = myAds.reduce((sum, a) => sum + (a.viewsCount || 0), 0);
-
   // Filter Ads
   const filteredAds = ads.filter((ad) => {
     if (hiddenAdIds.has(ad.adId)) return false;
@@ -186,88 +171,6 @@ export const FeedPage: React.FC<FeedPageProps> = ({
 
   return (
     <div className="space-y-3 pb-20 max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-3.5 pt-3">
-      
-      {/* Top Action Banners: Daily Streak + My Ads Dashboard */}
-      {userUid && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {/* Daily Streak Retention Hook */}
-          {onOpenDailyBonus && (
-            <button
-              onClick={() => {
-                triggerHaptic('light');
-                onOpenDailyBonus();
-              }}
-              className={`p-2.5 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-98 shadow-xs ${
-                !isDailyBonusClaimed
-                  ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 border-amber-400 text-white shadow-orange-500/20'
-                  : 'bg-white/80 border-orange-200/80 text-slate-800 hover:bg-white'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs ${
-                  !isDailyBonusClaimed ? 'bg-black/20 text-amber-200' : 'bg-orange-100 text-orange-600'
-                }`}>
-                  <Flame className={`w-5 h-5 ${!isDailyBonusClaimed ? 'animate-pulse text-amber-300' : ''}`} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black">Daily Streak Bonus</span>
-                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full ${
-                      !isDailyBonusClaimed ? 'bg-amber-300 text-slate-950' : 'bg-emerald-100 text-emerald-800'
-                    }`}>
-                      {!isDailyBonusClaimed ? 'Ready 🎁' : 'Claimed ✓'}
-                    </span>
-                  </div>
-                  <p className={`text-[10px] font-medium leading-tight mt-0.5 ${
-                    !isDailyBonusClaimed ? 'text-amber-100' : 'text-slate-500'
-                  }`}>
-                    {currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak!'} • Tap to claim credits
-                  </p>
-                </div>
-              </div>
-              <div className={`text-xs font-black ${!isDailyBonusClaimed ? 'text-white' : 'text-orange-600'}`}>
-                {!isDailyBonusClaimed ? '+2-5 Cr' : `${currentStreak} 🔥`}
-              </div>
-            </button>
-          )}
-
-          {/* My Active Ads Dashboard Link */}
-          {onOpenMyAds && (
-            <button
-              onClick={() => {
-                triggerHaptic('light');
-                onOpenMyAds();
-              }}
-              className="p-2.5 rounded-2xl border border-slate-200/80 bg-white/80 hover:bg-white text-slate-800 text-left flex items-center justify-between transition-all active:scale-98 shadow-xs"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shadow-2xs">
-                  <LayoutDashboard className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-black">My Active Ads</span>
-                    {myAds.length > 0 && (
-                      <span className="text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded-full">
-                        {myAds.length} live
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">
-                    {myAds.length > 0 
-                      ? `${myTotalViews} total views • Pause or renew`
-                      : 'Manage, track and boost your ads'}
-                  </p>
-                </div>
-              </div>
-              <span className="text-[11px] font-extrabold text-orange-600 hover:underline">
-                Manage →
-              </span>
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Desktop & Mobile Filters Bar */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
         {/* Search Input */}
@@ -388,7 +291,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
             <span className="text-orange-600 font-extrabold">+5 Credits per Add</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
             {sortedFilteredAds.map((ad) => (
               <AdCard
                 key={ad.adId}

@@ -17,7 +17,7 @@ import {
 import QRCode from 'qrcode';
 import { submitClaimVerification, generateVerificationCode, recordAdClick } from '../lib/transactions';
 import { PlatformIcon } from './PlatformIcon';
-import { getEffectiveAvatar } from '../lib/avatar';
+import { getEffectiveAvatar, getEffectiveAdCover, getEffectiveAdDescription } from '../lib/avatar';
 import { triggerHaptic, openNativeAppOrWeb } from '../lib/device';
 import { getCreatorBadge } from '../lib/badges';
 import { doc, getDoc } from 'firebase/firestore';
@@ -224,35 +224,79 @@ export const AddModal: React.FC<AddModalProps> = ({
           <X className="w-3.5 h-3.5" />
         </button>
 
-        {/* Modal Header */}
-        <div className="text-center mb-3">
-          <div className="relative mx-auto mb-2 w-14 h-14">
-            <div className="w-14 h-14 rounded-full overflow-hidden bg-slate-800 border-2 border-amber-400 shadow-md flex items-center justify-center">
-              <img
-                src={getEffectiveAvatar(ad.avatarUrl, ad.targetHandleOrNumber || ad.userDisplayName || ad.title)}
-                alt={ad.userDisplayName || 'Contact'}
-                className="w-full h-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div className="absolute -bottom-1 -right-1 bg-slate-900 p-0.5 rounded-full shadow-xs border border-white/20">
-              <PlatformIcon platform={ad.platform} size="sm" />
+        {/* Modal Hero Cover & Header */}
+        <div className="-mx-5 -mt-5 mb-4 rounded-t-3xl overflow-hidden relative">
+          <div className="relative w-full h-32 bg-slate-900 overflow-hidden">
+            <img
+              src={getEffectiveAdCover(ad)}
+              alt={ad.title}
+              className="w-full h-full object-cover brightness-[0.75]"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-black/50" />
+            
+            <div className="absolute top-3 left-3 flex items-center gap-1.5">
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wide shadow-md ${
+                isSnapchat ? 'bg-yellow-400 text-slate-950' : 'bg-emerald-600 text-white'
+              }`}>
+                <PlatformIcon platform={ad.platform} size="sm" />
+                <span>{isSnapchat ? 'Snapchat' : 'WhatsApp'}</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/50 text-white backdrop-blur-md">
+                {ad.category}
+              </span>
             </div>
           </div>
-          <h2 className="text-base font-black text-white leading-tight">
-            {isSnapchat ? 'Add on Snapchat' : 'Message on WhatsApp'}
-          </h2>
-          <p className="text-[11px] text-slate-300 font-medium line-clamp-1 mt-0.5">
-            {ad.title}
-          </p>
 
-          {/* Creator Reliability / Fast Verifier Badge */}
-          {creatorBadge && (
-            <div className={`mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${creatorBadge.bgClass} ${creatorBadge.colorClass} ${creatorBadge.borderClass} shadow-2xs`}>
-              <span>{creatorBadge.icon}</span>
-              <span>{creatorBadge.label}</span>
+          {/* Avatar and Creator Profile Info Overlay */}
+          <div className="px-5 -mt-8 relative z-10 flex items-end justify-between gap-3">
+            <div className="flex items-end gap-3">
+              <div className="relative flex-shrink-0">
+                <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-800 border-2 border-white shadow-xl flex items-center justify-center">
+                  <img
+                    src={getEffectiveAvatar(ad.avatarUrl, ad.targetHandleOrNumber || ad.userDisplayName || ad.title)}
+                    alt={ad.userDisplayName || 'Contact'}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <div className="absolute -bottom-1 -right-1 bg-slate-900 p-0.5 rounded-full shadow-xs border border-white/20">
+                  <PlatformIcon platform={ad.platform} size="sm" />
+                </div>
+              </div>
+
+              <div className="mb-0.5">
+                <h2 className="text-base font-black text-white leading-tight">
+                  {isSnapchat ? 'Add on Snapchat' : 'Message on WhatsApp'}
+                </h2>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="font-mono text-xs font-bold text-amber-300">
+                    {ad.targetHandleOrNumber}
+                  </span>
+                  {creatorBadge && (
+                    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[9px] font-black border ${creatorBadge.bgClass} ${creatorBadge.colorClass} ${creatorBadge.borderClass}`}>
+                      <span>{creatorBadge.icon}</span>
+                      <span>{creatorBadge.shortLabel}</span>
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-          )}
+
+            <div className="bg-orange-500 text-white px-2.5 py-1 rounded-full text-[11px] font-black shadow-md flex items-center gap-1 mb-1">
+              <span>🪙</span>
+              <span>+{ad.rewardPerAdd || 5} Cr</span>
+            </div>
+          </div>
+
+          <div className="px-5 mt-2.5">
+            <h3 className="text-sm font-bold text-slate-200 leading-snug">
+              {ad.title}
+            </h3>
+            <p className="text-xs text-slate-300 font-normal leading-relaxed mt-1 bg-white/5 border border-white/10 rounded-xl p-2.5">
+              {getEffectiveAdDescription(ad)}
+            </p>
+          </div>
         </div>
 
         {/* SUCCESS CONFIRMATION SCREEN */}

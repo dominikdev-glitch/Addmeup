@@ -200,11 +200,18 @@ export async function approveClaim(
     }
 
     const claimerRef = doc(db, 'users', claimData.claimerUid);
+    const reviewerRef = doc(db, 'users', reviewerUid);
+
+    // Execute ALL reads before any writes
     const claimerSnap = await transaction.get(claimerRef);
     let currentBalance = 0;
     if (claimerSnap.exists()) {
       currentBalance = Number(claimerSnap.data().creditBalance || 0);
     }
+
+    const reviewerSnap = await transaction.get(reviewerRef);
+    const prevApproved = reviewerSnap.exists() ? Number(reviewerSnap.data().approvedClaimsCount || 0) : 0;
+    const prevTotal = reviewerSnap.exists() ? Number(reviewerSnap.data().totalClaimsCount || 0) : 0;
 
     const rewardAmount = Number(claimData.creditsAwarded || 5);
     const newBalance = currentBalance + rewardAmount;
@@ -222,10 +229,6 @@ export async function approveClaim(
     });
 
     // 3. Update creator's reliability statistics
-    const reviewerRef = doc(db, 'users', reviewerUid);
-    const reviewerSnap = await transaction.get(reviewerRef);
-    const prevApproved = reviewerSnap.exists() ? Number(reviewerSnap.data().approvedClaimsCount || 0) : 0;
-    const prevTotal = reviewerSnap.exists() ? Number(reviewerSnap.data().totalClaimsCount || 0) : 0;
     transaction.set(reviewerRef, {
       approvedClaimsCount: prevApproved + 1,
       totalClaimsCount: prevTotal + 1,
@@ -301,17 +304,19 @@ export async function rejectClaim(
     }
 
     const finalReason = reason || "Handle or Code not found in friend requests / messages";
+    const reviewerRef = doc(db, 'users', reviewerUid);
 
+    // Execute ALL reads before any writes
+    const reviewerSnap = await transaction.get(reviewerRef);
+    const prevTotal = reviewerSnap.exists() ? Number(reviewerSnap.data().totalClaimsCount || 0) : 0;
+
+    // Execute writes
     transaction.update(claimRef, {
       status: 'rejected',
       rejectedAt: Date.now(),
       rejectionReason: finalReason,
     });
 
-    // Update creator's reliability statistics
-    const reviewerRef = doc(db, 'users', reviewerUid);
-    const reviewerSnap = await transaction.get(reviewerRef);
-    const prevTotal = reviewerSnap.exists() ? Number(reviewerSnap.data().totalClaimsCount || 0) : 0;
     transaction.set(reviewerRef, {
       totalClaimsCount: prevTotal + 1,
     }, { merge: true });
@@ -441,6 +446,8 @@ export async function publishAd(params: {
   durationLabel: string;
   userDisplayName?: string;
   avatarUrl?: string;
+  imageUrl?: string;
+  description?: string;
 }): Promise<{ success: boolean; adId: string }> {
   const { 
     userId, 
@@ -452,7 +459,9 @@ export async function publishAd(params: {
     costCredits, 
     durationLabel, 
     userDisplayName,
-    avatarUrl 
+    avatarUrl,
+    imageUrl,
+    description 
   } = params;
 
   if (!userId) {
@@ -500,6 +509,8 @@ export async function publishAd(params: {
       createdAt: nowMs,
       userDisplayName: userDisplayName || 'Social Member',
       avatarUrl: avatarUrl || null,
+      imageUrl: imageUrl || null,
+      description: description ? description.trim() : null,
       reportsCount: 0,
       viewsCount: 0,
       clicksCount: 0,

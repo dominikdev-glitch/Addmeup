@@ -29,6 +29,7 @@ export default function App() {
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
+    sendPasswordReset,
     signOut,
     updateHandles,
   } = useAuth();
@@ -185,6 +186,7 @@ export default function App() {
             onSignInGoogle={signInWithGoogle}
             onSignInEmail={signInWithEmail}
             onSignUpEmail={signUpWithEmail}
+            onSendPasswordReset={sendPasswordReset}
           />
         )}
       </>
@@ -370,6 +372,7 @@ export default function App() {
           onSignInGoogle={signInWithGoogle}
           onSignInEmail={signInWithEmail}
           onSignUpEmail={signUpWithEmail}
+          onSendPasswordReset={sendPasswordReset}
         />
       )}
 

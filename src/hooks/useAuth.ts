@@ -6,6 +6,7 @@ import {
   getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   updateProfile as updateFirebaseProfile,
   signOut as firebaseSignOut, 
   User 
@@ -153,7 +154,8 @@ export function useAuth() {
   const signInWithGoogle = async () => {
     try {
       setError(null);
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      return result;
     } catch (err: any) {
       console.error("Google sign-in error:", err);
       if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
@@ -161,13 +163,17 @@ export function useAuth() {
           await signInWithRedirect(auth, googleProvider);
           return;
         } catch (redirErr: any) {
-          setError(redirErr.message || "Unable to sign in with Google redirect.");
+          const msg = redirErr.message || "Unable to sign in with Google redirect.";
+          setError(msg);
+          throw new Error(msg);
         }
       } else if (err.code === 'auth/popup-closed-by-user') {
         // User voluntarily closed popup
         return;
       }
-      setError(err.message || "Unable to sign in with Google. Please try again.");
+      const msg = err.message || "Unable to sign in with Google. Please try again.";
+      setError(msg);
+      throw new Error(msg);
     }
   };
 
@@ -178,6 +184,10 @@ export function useAuth() {
     } catch (err: any) {
       console.error("Email sign-in error:", err);
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        const isGmail = email.trim().toLowerCase().includes('@gmail.com') || email.trim().toLowerCase().includes('@googlemail.com');
+        if (isGmail) {
+          throw new Error("No password match found for this Google email. If you signed up with Google, tap 'Continue with Google', or click 'Forgot/Set Password' to create a password.");
+        }
         throw new Error("Invalid email or password. Please check your credentials or create an account.");
       } else if (err.code === 'auth/invalid-email') {
         throw new Error("Please provide a valid email address.");
@@ -203,13 +213,33 @@ export function useAuth() {
     } catch (err: any) {
       console.error("Email registration error:", err);
       if (err.code === 'auth/email-already-in-use') {
-        throw new Error("This email is already registered. Please sign in instead.");
+        const isGmail = email.trim().toLowerCase().includes('@gmail.com') || email.trim().toLowerCase().includes('@googlemail.com');
+        if (isGmail) {
+          throw new Error("This email is already registered (likely with Google). Tap 'Continue with Google', or click 'Forgot/Set Password' to set a password for this account.");
+        }
+        throw new Error("This email is already registered. Please sign in instead or reset your password.");
       } else if (err.code === 'auth/weak-password') {
         throw new Error("Password must be at least 6 characters long.");
       } else if (err.code === 'auth/invalid-email') {
         throw new Error("Please provide a valid email address.");
       } else {
         throw new Error(err.message || "Failed to create account. Please try again.");
+      }
+    }
+  };
+
+  const sendPasswordReset = async (email: string) => {
+    try {
+      setError(null);
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (err: any) {
+      console.error("Password reset error:", err);
+      if (err.code === 'auth/user-not-found') {
+        throw new Error("No account found with this email. Please create an account or sign in with Google.");
+      } else if (err.code === 'auth/invalid-email') {
+        throw new Error("Please provide a valid email address.");
+      } else {
+        throw new Error(err.message || "Could not send password link. Please try again.");
       }
     }
   };
@@ -241,6 +271,7 @@ export function useAuth() {
     signInWithGoogle,
     signInWithEmail,
     signUpWithEmail,
+    sendPasswordReset,
     signOut,
     updateHandles,
   };

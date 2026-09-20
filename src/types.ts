@@ -66,6 +66,8 @@ export interface Ad {
   createdAt: number; // timestamp in ms
   userDisplayName?: string;
   avatarUrl?: string;
+  imageUrl?: string;
+  description?: string;
   reportsCount?: number;
   isBoosted?: boolean;
   boostedUntil?: number; // timestamp in ms
