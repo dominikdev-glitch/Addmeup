@@ -6,7 +6,10 @@ import {
   getDocs,
   query,
   where,
-  limit as fsLimit
+  limit as fsLimit,
+  updateDoc,
+  deleteDoc,
+  increment
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { 
@@ -218,7 +221,17 @@ export async function approveClaim(
       verifiedAt: nowMs,
     });
 
-    // 3. Log credit transaction for earner
+    // 3. Update creator's reliability statistics
+    const reviewerRef = doc(db, 'users', reviewerUid);
+    const reviewerSnap = await transaction.get(reviewerRef);
+    const prevApproved = reviewerSnap.exists() ? Number(reviewerSnap.data().approvedClaimsCount || 0) : 0;
+    const prevTotal = reviewerSnap.exists() ? Number(reviewerSnap.data().totalClaimsCount || 0) : 0;
+    transaction.set(reviewerRef, {
+      approvedClaimsCount: prevApproved + 1,
+      totalClaimsCount: prevTotal + 1,
+    }, { merge: true });
+
+    // 4. Log credit transaction for earner
     const transRef = doc(collection(db, 'transactions'));
     transaction.set(transRef, {
       transactionId: transRef.id,
@@ -294,6 +307,14 @@ export async function rejectClaim(
       rejectedAt: Date.now(),
       rejectionReason: finalReason,
     });
+
+    // Update creator's reliability statistics
+    const reviewerRef = doc(db, 'users', reviewerUid);
+    const reviewerSnap = await transaction.get(reviewerRef);
+    const prevTotal = reviewerSnap.exists() ? Number(reviewerSnap.data().totalClaimsCount || 0) : 0;
+    transaction.set(reviewerRef, {
+      totalClaimsCount: prevTotal + 1,
+    }, { merge: true });
 
     return { 
       success: true, 
@@ -480,6 +501,8 @@ export async function publishAd(params: {
       userDisplayName: userDisplayName || 'Social Member',
       avatarUrl: avatarUrl || null,
       reportsCount: 0,
+      viewsCount: 0,
+      clicksCount: 0,
     });
 
     // 4. Record transaction log
@@ -817,4 +840,227 @@ export async function boostAd(params: {
     newBalance: res.newBalance,
   };
 }
+
+// Memory cache to prevent duplicate views in same session
+const sessionViewedAds = new Set<string>();
+
+/**
+ * Increment view count of an ad safely once per browser session.
+ */
+export async function recordAdView(adId: string): Promise<void> {
+  if (!adId || sessionViewedAds.has(adId)) return;
+  sessionViewedAds.add(adId);
+  try {
+    const adRef = doc(db, 'ads', adId);
+    await updateDoc(adRef, {
+      viewsCount: increment(1),
+    });
+  } catch (err) {
+    // Non-critical, ignore
+  }
+}
+
+/**
+ * Increment tap/click count when user clicks an ad or takes action.
+ */
+export async function recordAdClick(adId: string): Promise<void> {
+  if (!adId) return;
+  try {
+    const adRef = doc(db, 'ads', adId);
+    await updateDoc(adRef, {
+      clicksCount: increment(1),
+    });
+  } catch (err) {
+    // Non-critical, ignore
+  }
+}
+
+/**
+ * Pause or resume an ad.
+ */
+export async function togglePauseAd(
+  adId: string, 
+  userId: string, 
+  newStatus: 'active' | 'paused'
+): Promise<boolean> {
+  if (!adId || !userId) throw new Error("Authentication required");
+  const adRef = doc(db, 'ads', adId);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(adRef);
+    if (!snap.exists()) throw new Error("Ad not found");
+    const data = snap.data();
+    if (data.userId !== userId) throw new Error("Unauthorized to edit this ad");
+    tx.update(adRef, { status: newStatus });
+  });
+  return true;
+}
+
+/**
+ * Extend or renew ad duration using credits.
+ */
+export async function extendAdDuration(params: {
+  adId: string;
+  userId: string;
+  durationHours: number;
+  costCredits: number;
+  durationLabel: string;
+}): Promise<{ success: boolean; newExpiresAt: number; newBalance: number }> {
+  const { adId, userId, durationHours, costCredits, durationLabel } = params;
+  if (!adId || !userId) throw new Error("Authentication required");
+
+  const userRef = doc(db, 'users', userId);
+  const adRef = doc(db, 'ads', adId);
+
+  return await runTransaction(db, async (tx) => {
+    const userSnap = await tx.get(userRef);
+    const currentBalance = Number(userSnap.data()?.creditBalance || 0);
+    if (currentBalance < costCredits) {
+      throw new Error(`Insufficient credits. You need ${costCredits} Cr to extend for ${durationLabel}.`);
+    }
+
+    const adSnap = await tx.get(adRef);
+    if (!adSnap.exists()) throw new Error("Ad not found");
+    const adData = adSnap.data();
+    if (adData.userId !== userId) throw new Error("Unauthorized to manage this ad");
+
+    const nowMs = Date.now();
+    const currentExpires = Number(adData.expiresAt || 0);
+    const baseTime = currentExpires > nowMs ? currentExpires : nowMs;
+    const additionalMs = durationHours * 60 * 60 * 1000;
+    const newExpiresAt = baseTime + additionalMs;
+    const newBalance = currentBalance - costCredits;
+
+    // Deduct credits
+    tx.set(userRef, { creditBalance: newBalance }, { merge: true });
+
+    // Update ad duration & activate
+    tx.update(adRef, {
+      expiresAt: newExpiresAt,
+      status: 'active',
+      durationHours: (Number(adData.durationHours) || 0) + durationHours,
+    });
+
+    // Record transaction
+    const transRef = doc(collection(db, 'transactions'));
+    tx.set(transRef, {
+      transactionId: transRef.id,
+      userId,
+      amount: -costCredits,
+      type: 'placed_ad',
+      referenceId: adId,
+      description: `Extended ad "${adData.title || 'Ad'}" (+${durationLabel})`,
+      createdAt: serverTimestamp(),
+    });
+
+    return { success: true, newExpiresAt, newBalance };
+  });
+}
+
+/**
+ * Permanently delete an ad by creator.
+ */
+export async function deleteAdPermanently(adId: string, userId: string): Promise<boolean> {
+  if (!adId || !userId) throw new Error("Authentication required");
+  const adRef = doc(db, 'ads', adId);
+  const snap = await runTransaction(db, async (tx) => {
+    const s = await tx.get(adRef);
+    if (!s.exists()) throw new Error("Ad not found");
+    if (s.data().userId !== userId) throw new Error("Unauthorized to delete this ad");
+    tx.delete(adRef);
+    return true;
+  });
+  return snap;
+}
+
+/**
+ * Daily check-in streak reward system.
+ * Awards base credits + streak multiplier every 24 hours.
+ */
+export async function claimDailyBonus(userId: string): Promise<{
+  success: boolean;
+  creditsAwarded: number;
+  newStreak: number;
+  newBalance: number;
+}> {
+  if (!userId) throw new Error("Please sign in to claim your daily bonus.");
+
+  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const userRef = doc(db, 'users', userId);
+
+  const res = await runTransaction(db, async (tx) => {
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists()) throw new Error("User record not found");
+    const userData = userSnap.data();
+
+    const lastDate = userData.lastDailyBonusDate;
+    if (lastDate === todayStr) {
+      throw new Error("You already claimed today's bonus! Check back tomorrow for your next reward.");
+    }
+
+    // Check if yesterday was claimed for streak continuity
+    let newStreak = 1;
+    if (lastDate) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      if (lastDate === yesterdayStr) {
+        newStreak = Math.min(30, (Number(userData.dailyStreak) || 0) + 1);
+      }
+    }
+
+    // Reward scaling based on streak:
+    // Day 1-2: 2 Credits
+    // Day 3-6: 3 Credits
+    // Day 7+: 5 Credits VIP bonus!
+    let rewardCredits = 2;
+    if (newStreak >= 7) {
+      rewardCredits = 5;
+    } else if (newStreak >= 3) {
+      rewardCredits = 3;
+    }
+
+    const currentBalance = Number(userData.creditBalance || 0);
+    const newBalance = currentBalance + rewardCredits;
+
+    // 1. Update user record
+    tx.update(userRef, {
+      creditBalance: newBalance,
+      lastDailyBonusDate: todayStr,
+      dailyStreak: newStreak,
+    });
+
+    // 2. Record transaction
+    const transRef = doc(collection(db, 'transactions'));
+    tx.set(transRef, {
+      transactionId: transRef.id,
+      userId,
+      amount: rewardCredits,
+      type: 'daily_bonus',
+      referenceId: `daily_${todayStr}`,
+      description: `Daily Check-in Day ${newStreak} Streak (+${rewardCredits} Credits 🎁)`,
+      createdAt: serverTimestamp(),
+    });
+
+    return {
+      success: true,
+      creditsAwarded: rewardCredits,
+      newStreak,
+      newBalance,
+    };
+  });
+
+  // In-app notification
+  if (res.success) {
+    sendNotification({
+      userId,
+      title: `Daily Reward Claimed! 🎁`,
+      message: `Day ${res.newStreak} check-in complete! +${res.creditsAwarded} Credits added to your balance. Keep your streak alive!`,
+      type: 'system',
+      linkTab: 'wallet',
+    }).catch(console.error);
+  }
+
+  return res;
+}
+
 

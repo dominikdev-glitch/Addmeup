@@ -40,7 +40,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/40 backdrop-blur-md animate-fade-in overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/40 backdrop-blur-md animate-fade-in overflow-y-auto modal-safe-overlay">
       <div className="glass-card border border-white/80 rounded-3xl p-5 sm:p-6 max-w-sm w-full text-slate-800 shadow-2xl relative my-auto max-h-[92vh] overflow-y-auto">
         
         {/* Close Button */}
@@ -71,7 +71,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             seedName={username || profile?.username || 'user'}
             onChangeAvatar={setPhotoUrl}
             label="Your Profile Picture"
-            description="Use your real photo (compressed to ~10 KB) or choose a 3D avatar"
+            description="Upload a photo from your phone or choose a 3D avatar"
           />
 
           <div>

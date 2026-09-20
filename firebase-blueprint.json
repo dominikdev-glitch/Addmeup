@@ -1,0 +1,158 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile with credit balance, handles, and verification stats",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "creditBalance": { "type": "number" },
+        "snapchatHandle": { "type": "string" },
+        "whatsappNumber": { "type": "string" },
+        "referralCode": { "type": "string" },
+        "referredBy": { "type": "string" },
+        "referralsCount": { "type": "number" },
+        "referralCreditsEarned": { "type": "number" },
+        "approvedClaimsCount": { "type": "number" },
+        "totalClaimsCount": { "type": "number" },
+        "dailyStreak": { "type": "number" },
+        "lastDailyBonusDate": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "username", "creditBalance"]
+    },
+    "Ad": {
+      "title": "Ad",
+      "description": "Promotional ad for Snapchat or WhatsApp",
+      "type": "object",
+      "properties": {
+        "adId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "platform": { "type": "string", "enum": ["snapchat", "whatsapp"] },
+        "targetHandleOrNumber": { "type": "string" },
+        "rewardPerAdd": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "paused", "expired"] },
+        "durationHours": { "type": "number" },
+        "costCredits": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "userDisplayName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "reportsCount": { "type": "number" },
+        "isBoosted": { "type": "boolean" },
+        "boostedUntil": { "type": "number" },
+        "boostTier": { "type": "string" },
+        "viewsCount": { "type": "number" },
+        "clicksCount": { "type": "number" }
+      },
+      "required": ["adId", "userId", "title", "platform", "targetHandleOrNumber", "status", "expiresAt", "createdAt"]
+    },
+    "Claim": {
+      "title": "Claim",
+      "description": "Proof of add verification claim submitted by an earner",
+      "type": "object",
+      "properties": {
+        "claimId": { "type": "string" },
+        "adId": { "type": "string" },
+        "adOwnerUid": { "type": "string" },
+        "adTitle": { "type": "string" },
+        "platform": { "type": "string", "enum": ["snapchat", "whatsapp"] },
+        "targetHandleOrNumber": { "type": "string" },
+        "claimerUid": { "type": "string" },
+        "claimerDisplayName": { "type": "string" },
+        "verificationCode": { "type": "string" },
+        "claimerSnapchatHandle": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "creditsAwarded": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "verifiedAt": { "type": "number" },
+        "rejectedAt": { "type": "number" },
+        "rejectionReason": { "type": "string" },
+        "autoApproveAt": { "type": "number" },
+        "autoApproved": { "type": "boolean" }
+      },
+      "required": ["claimId", "adId", "adOwnerUid", "claimerUid", "status", "creditsAwarded", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Credit history record for earns, deposits, ad placements, boosts, and bonuses",
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "amountNgn": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["transactionId", "userId", "amount", "type"]
+    },
+    "AppNotification": {
+      "title": "AppNotification",
+      "description": "User notification alert for claims, verification, deposits, boosts, and reminders",
+      "type": "object",
+      "properties": {
+        "notificationId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "linkTab": { "type": "string" },
+        "meta": { "type": "object" }
+      },
+      "required": ["notificationId", "userId", "title", "message", "type", "read", "createdAt"]
+    },
+    "AdReport": {
+      "title": "AdReport",
+      "description": "Moderation report filed by a user against an ad",
+      "type": "object",
+      "properties": {
+        "reportId": { "type": "string" },
+        "adId": { "type": "string" },
+        "reportedUserId": { "type": "string" },
+        "reporterUid": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["reportId", "adId", "reportedUserId", "reporterUid", "reason", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents keyed by Firebase Auth UID"
+    },
+    "/ads/{adId}": {
+      "schema": "Ad",
+      "description": "Public social ads for Snapchat and WhatsApp"
+    },
+    "/claims/{claimId}": {
+      "schema": "Claim",
+      "description": "Proof of add verification records keyed by adId_claimerUid"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Credit balance transaction ledger"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "AppNotification",
+      "description": "Notifications for claims, approvals, deposits, and rewards"
+    },
+    "/reports/{reportId}": {
+      "schema": "AdReport",
+      "description": "Moderation and safety reports"
+    }
+  }
+}

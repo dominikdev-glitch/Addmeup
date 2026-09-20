@@ -18,7 +18,8 @@ import {
   Gift,
   Copy,
   Check,
-  Share2
+  Share2,
+  Flame
 } from 'lucide-react';
 
 interface WalletPageProps {
@@ -168,6 +169,28 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                 <Compass className="w-3.5 h-3.5 text-orange-400" />
                 <span>Earn Free (+5)</span>
               </button>
+            </div>
+          </div>
+
+          {/* Daily Streak Status Card */}
+          <div className="glass-card border border-amber-300/80 bg-gradient-to-r from-amber-50/70 to-orange-50/70 rounded-2xl p-3 shadow-2xs flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-2xs">
+                <Flame className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-black text-slate-900">Daily Login Streak</span>
+                  <span className="text-[9px] font-black bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded-full">
+                    {profile?.dailyStreak || 0}d streak 🔥
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  {profile?.lastDailyBonusDate === new Date().toISOString().split('T')[0]
+                    ? "Claimed today! Check back tomorrow for more credits."
+                    : "Bonus ready! Check Feed to claim free credits."}
+                </p>
+              </div>
             </div>
           </div>
 

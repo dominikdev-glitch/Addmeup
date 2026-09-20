@@ -44,6 +44,10 @@ export interface UserProfile {
   referredBy?: string;
   referralsCount?: number;
   referralCreditsEarned?: number;
+  approvedClaimsCount?: number;
+  totalClaimsCount?: number;
+  dailyStreak?: number;
+  lastDailyBonusDate?: string;
   createdAt: string | number;
 }
 
@@ -55,7 +59,7 @@ export interface Ad {
   platform: PlatformType;
   targetHandleOrNumber: string;
   rewardPerAdd: number; // default: 5
-  status: 'active' | 'expired';
+  status: 'active' | 'paused' | 'expired';
   durationHours?: number;
   costCredits?: number;
   expiresAt: number; // timestamp in ms
@@ -66,6 +70,8 @@ export interface Ad {
   isBoosted?: boolean;
   boostedUntil?: number; // timestamp in ms
   boostTier?: string;
+  viewsCount?: number;
+  clicksCount?: number;
 }
 
 export type ClaimStatus = 'pending' | 'verified' | 'rejected';

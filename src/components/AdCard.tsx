@@ -1,9 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Ad } from '../types';
-import { Clock, CheckCircle2, ExternalLink, Flag, Rocket, Sparkles, Flame, Share2 } from 'lucide-react';
+import { Ad, UserProfile } from '../types';
+import { 
+  Clock, 
+  CheckCircle2, 
+  ExternalLink, 
+  Flag, 
+  Rocket, 
+  Flame, 
+  Share2, 
+  Eye, 
+  MousePointerClick,
+  PauseCircle
+} from 'lucide-react';
 import { PlatformIcon } from './PlatformIcon';
 import { getEffectiveAvatar } from '../lib/avatar';
 import { triggerHaptic, triggerNativeShare } from '../lib/device';
+import { recordAdView } from '../lib/transactions';
+import { getCreatorBadge } from '../lib/badges';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface AdCardProps {
   ad: Ad;
@@ -26,9 +41,34 @@ export const AdCard: React.FC<AdCardProps> = ({
   const [isExpired, setIsExpired] = useState<boolean>(false);
   const [progressPercent, setProgressPercent] = useState<number>(100);
   const [boostTimeLeft, setBoostTimeLeft] = useState<string>('');
+  const [creatorUser, setCreatorUser] = useState<UserProfile | null>(null);
 
   const isBoosted = Boolean(ad.boostedUntil && ad.boostedUntil > Date.now());
   const isOwner = Boolean(currentUserId && currentUserId === ad.userId);
+  const isPaused = ad.status === 'paused';
+
+  // Count ad view on mount
+  useEffect(() => {
+    if (ad.adId && ad.status === 'active') {
+      recordAdView(ad.adId);
+    }
+  }, [ad.adId, ad.status]);
+
+  // Load creator reliability stats
+  useEffect(() => {
+    if (ad.userId) {
+      getDoc(doc(db, 'users', ad.userId))
+        .then((s) => {
+          if (s.exists()) setCreatorUser(s.data() as UserProfile);
+        })
+        .catch(console.error);
+    }
+  }, [ad.userId]);
+
+  const creatorBadge = getCreatorBadge(
+    creatorUser?.approvedClaimsCount || 0,
+    creatorUser?.totalClaimsCount || 0
+  );
 
   useEffect(() => {
     const updateCountdown = () => {
@@ -91,6 +131,10 @@ export const AdCard: React.FC<AdCardProps> = ({
     ? (ad.durationHours >= 720 ? '1 Month' : ad.durationHours >= 168 ? '7 Days' : ad.durationHours >= 24 ? '24 Hours' : `${ad.durationHours} Hours`)
     : 'Live Ad';
 
+  const views = Number(ad.viewsCount || 0);
+  const clicks = Number(ad.clicksCount || 0);
+  const ctrPercent = views > 0 ? ((clicks / views) * 100).toFixed(0) : '0';
+
   return (
     <div className={`glass-card rounded-2xl p-3.5 transition-all duration-200 hover:shadow-md relative group flex flex-col justify-between ${
       isBoosted 
@@ -134,7 +178,7 @@ export const AdCard: React.FC<AdCardProps> = ({
             </div>
 
             <div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className={`text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${
                   isSnapchat 
                     ? 'bg-yellow-100 text-yellow-900 border-yellow-300' 
@@ -142,15 +186,34 @@ export const AdCard: React.FC<AdCardProps> = ({
                 }`}>
                   {isSnapchat ? 'Snapchat' : 'WhatsApp'}
                 </span>
+
+                {isPaused && (
+                  <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                    <PauseCircle className="w-2.5 h-2.5" />
+                    <span>Paused</span>
+                  </span>
+                )}
+
                 <span className="text-[10px] text-slate-500 font-bold">
                   • {ad.category}
                 </span>
               </div>
-              {ad.userDisplayName && (
-                <p className="text-[9px] text-slate-400 font-medium leading-tight mt-0.5">
-                  by {ad.userDisplayName}
-                </p>
-              )}
+
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                {ad.userDisplayName && (
+                  <p className="text-[9px] text-slate-400 font-medium leading-tight">
+                    by {ad.userDisplayName}
+                  </p>
+                )}
+
+                {/* Creator Reliability Trust Badge */}
+                {creatorBadge && (
+                  <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[9px] font-bold border ${creatorBadge.bgClass} ${creatorBadge.colorClass} ${creatorBadge.borderClass}`} title={creatorBadge.description}>
+                    <span>{creatorBadge.icon}</span>
+                    <span>{creatorBadge.shortLabel}</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -221,6 +284,27 @@ export const AdCard: React.FC<AdCardProps> = ({
             </span>
           </p>
         </div>
+
+        {/* Performance Metrics Tracker (Views, Clicks/Taps, CTR) */}
+        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium mb-2.5 px-0.5">
+          <span className="flex items-center gap-1" title="Impressions in feed">
+            <Eye className="w-3 h-3 text-slate-400" />
+            <span>{views} views</span>
+          </span>
+          <span>•</span>
+          <span className="flex items-center gap-1" title="Taps on Add button">
+            <MousePointerClick className="w-3 h-3 text-slate-400" />
+            <span>{clicks} taps</span>
+          </span>
+          {views > 0 && clicks > 0 && (
+            <>
+              <span>•</span>
+              <span className="text-orange-600 font-extrabold">
+                {ctrPercent}% CTR
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
       <div>
@@ -247,6 +331,11 @@ export const AdCard: React.FC<AdCardProps> = ({
         {isExpired ? (
           <div className="w-full py-2 bg-slate-100 text-slate-400 rounded-xl text-center text-[11px] font-bold border border-slate-200">
             This ad has ended
+          </div>
+        ) : isPaused ? (
+          <div className="w-full py-2 bg-amber-50 text-amber-800 rounded-xl text-center text-[11px] font-bold border border-amber-200 flex items-center justify-center gap-1.5">
+            <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
+            <span>Ad Temporarily Paused by Creator</span>
           </div>
         ) : isOwner ? (
           <div className="flex items-center gap-2">

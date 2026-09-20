@@ -72,7 +72,10 @@ export const MobileInstallPrompt: React.FC = () => {
   if (!showPrompt || isStandalone) return null;
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 z-40 max-w-md mx-auto animate-slide-up">
+    <div 
+      className="fixed left-3 right-3 z-40 max-w-md mx-auto animate-slide-up"
+      style={{ bottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+    >
       <div className="glass-card-dark border border-white/20 p-3 rounded-2xl shadow-2xl text-white flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center text-white shrink-0 shadow-md">

@@ -14,7 +14,18 @@ import {
   getDocs 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Search, PlusCircle, Filter, RefreshCw, Rocket, Sparkles } from 'lucide-react';
+import { 
+  Search, 
+  PlusCircle, 
+  Filter, 
+  RefreshCw, 
+  Rocket, 
+  Sparkles, 
+  Gift, 
+  Flame, 
+  LayoutDashboard,
+  Check
+} from 'lucide-react';
 import { triggerHaptic } from '../lib/device';
 
 interface FeedPageProps {
@@ -24,6 +35,9 @@ interface FeedPageProps {
   onNavigateWallet?: () => void;
   onRequireAuth: () => void;
   onToast: (msg: string) => void;
+  onOpenMyAds?: () => void;
+  onOpenDailyBonus?: () => void;
+  allAds?: Ad[];
 }
 
 export const FeedPage: React.FC<FeedPageProps> = ({
@@ -33,6 +47,8 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   onNavigateWallet,
   onRequireAuth,
   onToast,
+  onOpenMyAds,
+  onOpenDailyBonus,
 }) => {
   const [ads, setAds] = useState<Ad[]>([]);
   const [claimedAdIds, setClaimedAdIds] = useState<Set<string>>(new Set());
@@ -45,106 +61,42 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   const [selectedAdForReport, setSelectedAdForReport] = useState<Ad | null>(null);
   const [selectedAdForBoost, setSelectedAdForBoost] = useState<Ad | null>(null);
 
+  // Check today's bonus claim status
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isDailyBonusClaimed = profile?.lastDailyBonusDate === todayStr;
+  const currentStreak = Number(profile?.dailyStreak || 0);
+
   // 1. Fetch live active ads
   useEffect(() => {
     setLoading(true);
     const adsRef = collection(db, 'ads');
-    // Query active ads using single-field filter to avoid requiring manual composite indexes
+    // Fetch active & paused ads
     const q = query(
       adsRef,
-      where('status', '==', 'active'),
       limit(100)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const now = Date.now();
-      const list: Ad[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        const expiresAtMs = data.expiresAt?.toMillis ? data.expiresAt.toMillis() : Number(data.expiresAt || 0);
-        // Only include non-expired ads
-        if (expiresAtMs > now) {
-          const boostedUntilMs = data.boostedUntil?.toMillis ? data.boostedUntil.toMillis() : Number(data.boostedUntil || 0);
-          const isBoosted = boostedUntilMs > now;
-
-          list.push({
-            adId: docSnap.id,
-            userId: data.userId,
-            title: data.title || 'Promotional Ad',
-            category: data.category || 'Friends',
-            platform: data.platform || 'snapchat',
-            targetHandleOrNumber: data.targetHandleOrNumber || '',
-            rewardPerAdd: Number(data.rewardPerAdd || 5),
-            status: data.status || 'active',
-            expiresAt: expiresAtMs,
-            createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Number(data.createdAt || Date.now()),
-            userDisplayName: data.userDisplayName || 'User',
-            avatarUrl: data.avatarUrl || data.photoUrl || undefined,
-            reportsCount: Number(data.reportsCount || 0),
-            isBoosted,
-            boostedUntil: boostedUntilMs > 0 ? boostedUntilMs : undefined,
-            boostTier: data.boostTier,
-          });
+      const fetchedAds: Ad[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data() as Ad;
+        // Keep active or paused ads
+        if ((data.status === 'active' || data.status === 'paused') && data.expiresAt > now) {
+          fetchedAds.push(data);
         }
       });
-      // Sort in memory: boosted ads at top, then newest ads first
-      list.sort((a, b) => {
-        if (a.isBoosted && !b.isBoosted) return -1;
-        if (!a.isBoosted && b.isBoosted) return 1;
-        return (b.createdAt || 0) - (a.createdAt || 0);
-      });
-      setAds(list);
+      setAds(fetchedAds);
       setLoading(false);
-    }, (err) => {
-      console.error("Firestore ads query error:", err);
-      // Fallback in case of index issues: fetch recent ads without filter and filter in memory
-      const fallbackQ = query(adsRef, limit(100));
-      getDocs(fallbackQ).then((fallbackSnap) => {
-        const now = Date.now();
-        const fallbackList: Ad[] = [];
-        fallbackSnap.forEach((docSnap) => {
-          const data = docSnap.data();
-          if (data.status !== 'active') return;
-          const expiresAtMs = data.expiresAt?.toMillis ? data.expiresAt.toMillis() : Number(data.expiresAt || 0);
-          if (expiresAtMs <= now) return;
-          const boostedUntilMs = data.boostedUntil?.toMillis ? data.boostedUntil.toMillis() : Number(data.boostedUntil || 0);
-          const isBoosted = boostedUntilMs > now;
-          fallbackList.push({
-            adId: docSnap.id,
-            userId: data.userId,
-            title: data.title || 'Promotional Ad',
-            category: data.category || 'Friends',
-            platform: data.platform || 'snapchat',
-            targetHandleOrNumber: data.targetHandleOrNumber || '',
-            rewardPerAdd: Number(data.rewardPerAdd || 5),
-            status: data.status || 'active',
-            expiresAt: expiresAtMs,
-            createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Number(data.createdAt || Date.now()),
-            userDisplayName: data.userDisplayName || 'User',
-            avatarUrl: data.avatarUrl || data.photoUrl || undefined,
-            reportsCount: Number(data.reportsCount || 0),
-            isBoosted,
-            boostedUntil: boostedUntilMs > 0 ? boostedUntilMs : undefined,
-            boostTier: data.boostTier,
-          });
-        });
-        fallbackList.sort((a, b) => {
-          if (a.isBoosted && !b.isBoosted) return -1;
-          if (!a.isBoosted && b.isBoosted) return 1;
-          return (b.createdAt || 0) - (a.createdAt || 0);
-        });
-        setAds(fallbackList);
-      }).catch((fallbackErr) => {
-        console.error("Firestore fallback query error:", fallbackErr);
-      }).finally(() => {
-        setLoading(false);
-      });
+    }, (error) => {
+      console.error("Error fetching live ads:", error);
+      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  // 2. Fetch live claims for current logged-in user
+  // 2. Fetch user's claimed ads
   useEffect(() => {
     if (!userUid) {
       setClaimedAdIds(new Set());
@@ -155,38 +107,66 @@ export const FeedPage: React.FC<FeedPageProps> = ({
     const q = query(claimsRef, where('claimerUid', '==', userUid));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const claimedSet = new Set<string>();
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.adId) {
-          claimedSet.add(data.adId);
+      const ids = new Set<string>();
+      snapshot.forEach((doc) => {
+        const claim = doc.data();
+        if (claim.adId) {
+          ids.add(claim.adId);
         }
       });
-      setClaimedAdIds(claimedSet);
-    }, (err) => {
-      console.error("Firestore claims error:", err);
+      setClaimedAdIds(ids);
     });
 
     return () => unsubscribe();
   }, [userUid]);
 
-  // Filter ads based on search, category, platform, and hidden state
-  const categories = ['All', 'Friends', 'Business', 'Tech', 'Fashion', 'Services'];
+  const categories: string[] = [
+    'All',
+    'General',
+    'Gaming',
+    'Fitness',
+    'Crypto',
+    'Music',
+    'Students',
+    'Business',
+    'Dating',
+    'Fashion',
+    'Travel'
+  ];
 
+  // User's own ads count and views
+  const myAds = userUid ? ads.filter((a) => a.userId === userUid) : [];
+  const myTotalViews = myAds.reduce((sum, a) => sum + (a.viewsCount || 0), 0);
+
+  // Filter Ads
   const filteredAds = ads.filter((ad) => {
     if (hiddenAdIds.has(ad.adId)) return false;
-    const matchesCategory = selectedCategory === 'All' || ad.category === selectedCategory;
-    const matchesPlatform = selectedPlatform === 'All' || ad.platform === selectedPlatform;
-    const queryLower = searchQuery.toLowerCase().trim();
-    const matchesSearch = !queryLower || 
-      ad.title.toLowerCase().includes(queryLower) || 
-      ad.targetHandleOrNumber.toLowerCase().includes(queryLower) ||
-      ad.category.toLowerCase().includes(queryLower);
 
-    return matchesCategory && matchesPlatform && matchesSearch;
+    // Platform Filter
+    if (selectedPlatform !== 'All' && ad.platform !== selectedPlatform) {
+      return false;
+    }
+
+    // Category Filter
+    if (selectedCategory !== 'All' && ad.category !== selectedCategory) {
+      return false;
+    }
+
+    // Search Query Filter
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = ad.title.toLowerCase().includes(q);
+      const matchHandle = ad.targetHandleOrNumber.toLowerCase().includes(q);
+      const matchCategory = ad.category.toLowerCase().includes(q);
+      if (!matchTitle && !matchHandle && !matchCategory) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
-  // Sort: Boosted active ads first, then by remaining boost time, then normal ads by createdAt desc
+  // Sort: Boosted VIP first, then newest
   const sortedFilteredAds = [...filteredAds].sort((a, b) => {
     const now = Date.now();
     const aBoosted = Boolean(a.boostedUntil && a.boostedUntil > now);
@@ -206,6 +186,88 @@ export const FeedPage: React.FC<FeedPageProps> = ({
 
   return (
     <div className="space-y-3 pb-20 max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-3.5 pt-3">
+      
+      {/* Top Action Banners: Daily Streak + My Ads Dashboard */}
+      {userUid && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Daily Streak Retention Hook */}
+          {onOpenDailyBonus && (
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                onOpenDailyBonus();
+              }}
+              className={`p-2.5 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-98 shadow-xs ${
+                !isDailyBonusClaimed
+                  ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 border-amber-400 text-white shadow-orange-500/20'
+                  : 'bg-white/80 border-orange-200/80 text-slate-800 hover:bg-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-2xs ${
+                  !isDailyBonusClaimed ? 'bg-black/20 text-amber-200' : 'bg-orange-100 text-orange-600'
+                }`}>
+                  <Flame className={`w-5 h-5 ${!isDailyBonusClaimed ? 'animate-pulse text-amber-300' : ''}`} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black">Daily Streak Bonus</span>
+                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded-full ${
+                      !isDailyBonusClaimed ? 'bg-amber-300 text-slate-950' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {!isDailyBonusClaimed ? 'Ready 🎁' : 'Claimed ✓'}
+                    </span>
+                  </div>
+                  <p className={`text-[10px] font-medium leading-tight mt-0.5 ${
+                    !isDailyBonusClaimed ? 'text-amber-100' : 'text-slate-500'
+                  }`}>
+                    {currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak!'} • Tap to claim credits
+                  </p>
+                </div>
+              </div>
+              <div className={`text-xs font-black ${!isDailyBonusClaimed ? 'text-white' : 'text-orange-600'}`}>
+                {!isDailyBonusClaimed ? '+2-5 Cr' : `${currentStreak} 🔥`}
+              </div>
+            </button>
+          )}
+
+          {/* My Active Ads Dashboard Link */}
+          {onOpenMyAds && (
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                onOpenMyAds();
+              }}
+              className="p-2.5 rounded-2xl border border-slate-200/80 bg-white/80 hover:bg-white text-slate-800 text-left flex items-center justify-between transition-all active:scale-98 shadow-xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shadow-2xs">
+                  <LayoutDashboard className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black">My Active Ads</span>
+                    {myAds.length > 0 && (
+                      <span className="text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded-full">
+                        {myAds.length} live
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">
+                    {myAds.length > 0 
+                      ? `${myTotalViews} total views • Pause or renew`
+                      : 'Manage, track and boost your ads'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] font-extrabold text-orange-600 hover:underline">
+                Manage →
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Desktop & Mobile Filters Bar */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
         {/* Search Input */}
@@ -368,9 +430,9 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           ad={selectedAdForBoost}
           userUid={userUid || ''}
           userBalance={profile?.creditBalance || 0}
-          onBoostSuccess={(boostedUntil, newBalance) => {
+          onBoostSuccess={(boostedUntil) => {
             onToast("🚀 Post Boost Activated! Your ad is now pinned to the top of the feed.");
-            // Update local state if needed
+            // Update local state
             setAds(prev => prev.map(a => a.adId === selectedAdForBoost.adId ? { ...a, isBoosted: true, boostedUntil } : a));
           }}
           onOpenWallet={onNavigateWallet}

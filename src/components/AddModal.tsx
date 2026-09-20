@@ -9,12 +9,19 @@ import {
   Copy, 
   Check, 
   Clock, 
-  UserCheck 
+  UserCheck,
+  QrCode,
+  Smartphone,
+  Download
 } from 'lucide-react';
-import { submitClaimVerification, generateVerificationCode } from '../lib/transactions';
+import QRCode from 'qrcode';
+import { submitClaimVerification, generateVerificationCode, recordAdClick } from '../lib/transactions';
 import { PlatformIcon } from './PlatformIcon';
 import { getEffectiveAvatar } from '../lib/avatar';
 import { triggerHaptic, openNativeAppOrWeb } from '../lib/device';
+import { getCreatorBadge } from '../lib/badges';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface AddModalProps {
   ad: Ad;
@@ -36,6 +43,9 @@ export const AddModal: React.FC<AddModalProps> = ({
   const isSnapchat = ad.platform === 'snapchat';
 
   // State
+  const [activeMode, setActiveMode] = useState<'direct' | 'qrcode'>('direct');
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [creatorProfile, setCreatorProfile] = useState<UserProfile | null>(null);
   const [verificationCode] = useState<string>(() => generateVerificationCode());
   const [snapchatHandle, setSnapchatHandle] = useState<string>(() => {
     return profile?.snapchatHandle || localStorage.getItem('amu_snap_handle') || '';
@@ -57,8 +67,37 @@ export const AddModal: React.FC<AddModalProps> = ({
 
   const waWebLink = `https://wa.me/${cleanPhone}?text=${encodedWaMessage}`;
   const snapWebLink = `https://snapchat.com/add/${cleanTarget}`;
+  const targetLink = isSnapchat ? snapWebLink : waWebLink;
 
-  const currentActionLink = isSnapchat ? snapWebLink : waWebLink;
+  // Load creator profile to display reliability badge
+  useEffect(() => {
+    if (ad.userId) {
+      getDoc(doc(db, 'users', ad.userId)).then((snap) => {
+        if (snap.exists()) {
+          setCreatorProfile(snap.data() as UserProfile);
+        }
+      }).catch(console.error);
+    }
+  }, [ad.userId]);
+
+  // Generate QR code for instant scanning
+  useEffect(() => {
+    QRCode.toDataURL(targetLink, {
+      width: 280,
+      margin: 2,
+      color: {
+        dark: isSnapchat ? '#0f172a' : '#047857',
+        light: '#ffffff',
+      },
+    })
+      .then(setQrDataUrl)
+      .catch(console.error);
+  }, [targetLink, isSnapchat]);
+
+  const creatorBadge = getCreatorBadge(
+    creatorProfile?.approvedClaimsCount || 0,
+    creatorProfile?.totalClaimsCount || 0
+  );
 
   const handleCopyCode = () => {
     triggerHaptic('light');
@@ -90,8 +129,38 @@ export const AddModal: React.FC<AddModalProps> = ({
     setSecondsLeft(6);
     setErrorMessage(null);
 
+    // Increment click metric
+    recordAdClick(ad.adId);
+
     // Launch native mobile app directly with deep linking (snapchat:// or whatsapp://)
     openNativeAppOrWeb(ad.platform, ad.targetHandleOrNumber, isSnapchat ? undefined : waMessage);
+  };
+
+  const handleScanReady = () => {
+    if (!userId) {
+      triggerHaptic('warning');
+      onRequireAuth();
+      return;
+    }
+
+    if (isSnapchat && !snapchatHandle.trim()) {
+      triggerHaptic('warning');
+      setErrorMessage("Please enter your Snapchat username below so the ad creator can verify your add.");
+      return;
+    }
+
+    if (isSnapchat && snapchatHandle.trim()) {
+      localStorage.setItem('amu_snap_handle', snapchatHandle.trim());
+    }
+
+    triggerHaptic('medium');
+    setHasOpenedApp(true);
+    setTimerRunning(true);
+    setSecondsLeft(6);
+    setErrorMessage(null);
+
+    // Increment click metric
+    recordAdClick(ad.adId);
   };
 
   useEffect(() => {
@@ -144,7 +213,7 @@ export const AddModal: React.FC<AddModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in modal-safe-overlay">
       <div className="glass-card-dark border border-white/20 rounded-2xl p-4 sm:p-5 max-w-sm w-full text-white shadow-2xl relative overflow-hidden max-h-[92vh] overflow-y-auto">
         
         {/* Close Button */}
@@ -176,6 +245,14 @@ export const AddModal: React.FC<AddModalProps> = ({
           <p className="text-[11px] text-slate-300 font-medium line-clamp-1 mt-0.5">
             {ad.title}
           </p>
+
+          {/* Creator Reliability / Fast Verifier Badge */}
+          {creatorBadge && (
+            <div className={`mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${creatorBadge.bgClass} ${creatorBadge.colorClass} ${creatorBadge.borderClass} shadow-2xs`}>
+              <span>{creatorBadge.icon}</span>
+              <span>{creatorBadge.label}</span>
+            </div>
+          )}
         </div>
 
         {/* SUCCESS CONFIRMATION SCREEN */}
@@ -219,6 +296,40 @@ export const AddModal: React.FC<AddModalProps> = ({
           /* VERIFICATION STEPS SCREEN */
           <div className="space-y-3">
             
+            {/* Mode Switcher: Direct App vs QR Code */}
+            <div className="flex bg-slate-900/90 p-0.5 rounded-xl border border-white/15 text-[11px] font-extrabold">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setActiveMode('direct');
+                }}
+                className={`flex-1 py-1 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  activeMode === 'direct'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-3 h-3" />
+                <span>Open in App</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setActiveMode('qrcode');
+                }}
+                className={`flex-1 py-1 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                  activeMode === 'qrcode'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <QrCode className="w-3 h-3" />
+                <span>Scan QR Code</span>
+              </button>
+            </div>
+
             {/* Target Account Badge */}
             <div className="bg-white/10 rounded-xl p-2 border border-white/15 text-center">
               <span className="text-[9px] text-slate-300 uppercase tracking-widest font-bold block mb-0.5">
@@ -278,8 +389,55 @@ export const AddModal: React.FC<AddModalProps> = ({
               </div>
             )}
 
-            {/* Step 1: Open App Button */}
-            {!hasOpenedApp ? (
+            {/* DIRECT MODE OR QR CODE MODE */}
+            {activeMode === 'qrcode' ? (
+              /* QR CODE QUICK SCAN */
+              <div className="bg-white/10 border border-white/15 rounded-2xl p-3 text-center space-y-2.5">
+                <div className="bg-white p-2.5 rounded-xl inline-block shadow-inner mx-auto">
+                  {qrDataUrl ? (
+                    <img
+                      src={qrDataUrl}
+                      alt="Quick Scan QR Code"
+                      className="w-40 h-40 sm:w-44 sm:h-44 rounded-lg mx-auto object-contain"
+                    />
+                  ) : (
+                    <div className="w-40 h-40 flex items-center justify-center text-slate-400 text-xs">
+                      Generating QR...
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-amber-300">
+                    Scan with your phone camera or {isSnapchat ? 'Snapchat app' : 'WhatsApp'}
+                  </p>
+                  <p className="text-[9px] text-slate-300">
+                    Add or message <span className="font-mono font-bold text-white">{ad.targetHandleOrNumber}</span> directly!
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {qrDataUrl && (
+                    <a
+                      href={qrDataUrl}
+                      download={`amu_${isSnapchat ? 'snap' : 'wa'}_${cleanTarget}.png`}
+                      className="py-1.5 px-2 bg-white/15 hover:bg-white/25 rounded-xl text-[10px] font-extrabold text-slate-200 flex items-center justify-center gap-1 transition-all"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Save QR</span>
+                    </a>
+                  )}
+
+                  <button
+                    onClick={handleScanReady}
+                    className="flex-1 py-2 px-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95"
+                  >
+                    I Scanned It → Continue
+                  </button>
+                </div>
+              </div>
+            ) : !hasOpenedApp ? (
+              /* Step 1: Open App Button */
               <div className="space-y-2">
                 <button
                   onClick={handleOpenLink}
@@ -297,8 +455,10 @@ export const AddModal: React.FC<AddModalProps> = ({
                   Tap above to perform the add. Then return here to submit verification!
                 </p>
               </div>
-            ) : (
-              /* Step 2: Timer & Submit Verification Button */
+            ) : null}
+
+            {/* Step 2: Timer & Submit Verification Button */}
+            {hasOpenedApp && (
               <div className="space-y-2.5">
                 {secondsLeft > 0 ? (
                   <div className="bg-white/10 border border-white/15 p-2.5 rounded-xl text-center space-y-1">

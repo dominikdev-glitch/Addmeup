@@ -4,8 +4,8 @@
   "description": "Share your Snapchat handle or WhatsApp number to get new followers, friends, or customers.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#fffaf0",
+  "theme_color": "#fffaf0",
   "orientation": "portrait",
   "icons": [
     {

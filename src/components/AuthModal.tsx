@@ -12,7 +12,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onSignInGoogle,
 }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-md animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/40 backdrop-blur-md animate-fade-in modal-safe-overlay">
       <div className="glass-card border border-white/80 rounded-3xl p-6 max-w-sm w-full text-slate-800 shadow-2xl relative text-center">
         
         {/* Close Button */}

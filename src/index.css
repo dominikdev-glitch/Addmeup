@@ -46,6 +46,17 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+.safe-area-top-spacer {
+  height: env(safe-area-inset-top, 0px);
+}
+
+.modal-safe-overlay {
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+}
+
 .glass-card {
   background: rgba(255, 255, 255, 0.75);
   backdrop-filter: blur(12px);
@@ -63,10 +74,13 @@ body {
 }
 
 .glass-header {
-  background: rgba(255, 250, 240, 0.85);
+  background: rgba(255, 250, 240, 0.94);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid rgba(251, 146, 60, 0.15);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .no-scrollbar::-webkit-scrollbar {

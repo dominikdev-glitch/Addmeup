@@ -90,7 +90,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in modal-safe-overlay">
       <div className="glass-card border border-white/80 rounded-2xl p-4 sm:p-5 max-w-sm w-full text-slate-800 shadow-2xl relative max-h-[90vh] overflow-y-auto">
         <button
           onClick={handleClose}
