@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile as updateFirebaseProfile,
   signOut as firebaseSignOut, 
   User 
 } from 'firebase/auth';
@@ -27,6 +32,15 @@ export function useAuth() {
     } catch (e) {
       console.warn("Could not read URL ref parameter:", e);
     }
+  }, []);
+
+  // Check for redirect result on app load
+  useEffect(() => {
+    getRedirectResult(auth).catch((err: any) => {
+      if (err?.code !== 'auth/popup-closed-by-user') {
+        console.warn("Redirect sign-in check:", err);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -142,7 +156,61 @@ export function useAuth() {
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
       console.error("Google sign-in error:", err);
-      setError("Unable to sign in with Google. Please try again.");
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirErr: any) {
+          setError(redirErr.message || "Unable to sign in with Google redirect.");
+        }
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        // User voluntarily closed popup
+        return;
+      }
+      setError(err.message || "Unable to sign in with Google. Please try again.");
+    }
+  };
+
+  const signInWithEmail = async (email: string, pass: string) => {
+    try {
+      setError(null);
+      await signInWithEmailAndPassword(auth, email.trim(), pass);
+    } catch (err: any) {
+      console.error("Email sign-in error:", err);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        throw new Error("Invalid email or password. Please check your credentials or create an account.");
+      } else if (err.code === 'auth/invalid-email') {
+        throw new Error("Please provide a valid email address.");
+      } else {
+        throw new Error(err.message || "Failed to sign in. Please try again.");
+      }
+    }
+  };
+
+  const signUpWithEmail = async (email: string, pass: string, username: string) => {
+    try {
+      setError(null);
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      if (cred.user && username.trim()) {
+        try {
+          await updateFirebaseProfile(cred.user, {
+            displayName: username.trim(),
+          });
+        } catch (pErr) {
+          console.warn("Could not update display name:", pErr);
+        }
+      }
+    } catch (err: any) {
+      console.error("Email registration error:", err);
+      if (err.code === 'auth/email-already-in-use') {
+        throw new Error("This email is already registered. Please sign in instead.");
+      } else if (err.code === 'auth/weak-password') {
+        throw new Error("Password must be at least 6 characters long.");
+      } else if (err.code === 'auth/invalid-email') {
+        throw new Error("Please provide a valid email address.");
+      } else {
+        throw new Error(err.message || "Failed to create account. Please try again.");
+      }
     }
   };
 
@@ -171,6 +239,8 @@ export function useAuth() {
     loading,
     error,
     signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
     signOut,
     updateHandles,
   };

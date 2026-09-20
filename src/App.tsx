@@ -27,6 +27,8 @@ export default function App() {
     loading,
     error: authError,
     signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
     signOut,
     updateHandles,
   } = useAuth();
@@ -181,6 +183,8 @@ export default function App() {
           <AuthModal
             onClose={() => setShowAuthModal(false)}
             onSignInGoogle={signInWithGoogle}
+            onSignInEmail={signInWithEmail}
+            onSignUpEmail={signUpWithEmail}
           />
         )}
       </>
@@ -364,6 +368,8 @@ export default function App() {
         <AuthModal
           onClose={() => setShowAuthModal(false)}
           onSignInGoogle={signInWithGoogle}
+          onSignInEmail={signInWithEmail}
+          onSignUpEmail={signUpWithEmail}
         />
       )}
 
