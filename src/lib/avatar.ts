@@ -115,17 +115,25 @@ export const PRESET_3D_AVATARS: PresetAvatar[] = [
 /**
  * Generates an instant high-quality fallback avatar based on handle or name seed.
  */
-export function getFallbackAvatar(seed: string): string {
-  const cleanSeed = (seed || 'social').trim().replace(/[@+]/g, '');
-  return `https://api.dicebear.com/9.x/personas/svg?seed=${encodeURIComponent(cleanSeed)}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf&radius=50`;
+export function getFallbackAvatar(seed?: any): string {
+  const cleanSeed = String(seed || 'social').trim().replace(/[@+]/g, '');
+  return `https://api.dicebear.com/9.x/personas/svg?seed=${encodeURIComponent(cleanSeed || 'social')}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf&radius=50`;
 }
 
 /**
  * Returns user-specified avatar or automatic seeded fallback.
  */
-export function getEffectiveAvatar(avatarUrl?: string | null, seed?: string): string {
-  if (avatarUrl && avatarUrl.trim().length > 0) {
-    return avatarUrl.trim();
+export function getEffectiveAvatar(avatarUrl?: any, seed?: any): string {
+  if (avatarUrl) {
+    if (typeof avatarUrl === 'string' && avatarUrl.trim().length > 0) {
+      return avatarUrl.trim();
+    }
+    if (typeof avatarUrl === 'object' && avatarUrl !== null) {
+      const candidate = avatarUrl.dataUrl || avatarUrl.url;
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
   }
   return getFallbackAvatar(seed || 'user');
 }
@@ -282,14 +290,26 @@ export const PRESET_COVER_BANNERS: PresetCoverBanner[] = [
  * Returns the effective cover photo/banner for an ad.
  * Supports custom uploaded images or falls back to category-tuned banners.
  */
-export function getEffectiveAdCover(ad: {
-  imageUrl?: string | null;
+export function getEffectiveAdCover(ad?: {
+  imageUrl?: any;
   category?: string;
   platform?: string;
   adId?: string;
-}): string {
-  if (ad.imageUrl && ad.imageUrl.trim().length > 0) {
-    return ad.imageUrl.trim();
+} | null): string {
+  if (!ad) {
+    return 'https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=900&q=80';
+  }
+
+  if (ad.imageUrl) {
+    if (typeof ad.imageUrl === 'string' && ad.imageUrl.trim().length > 0) {
+      return ad.imageUrl.trim();
+    }
+    if (typeof ad.imageUrl === 'object' && ad.imageUrl !== null) {
+      const candidate = ad.imageUrl.dataUrl || ad.imageUrl.url;
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
   }
 
   const covers: Record<string, string> = {
@@ -306,13 +326,25 @@ export function getEffectiveAdCover(ad: {
 /**
  * Generates an appealing description if older ads did not have one saved.
  */
-export function getEffectiveAdDescription(ad: {
-  description?: string | null;
+export function getEffectiveAdDescription(ad?: {
+  description?: any;
   category?: string;
   platform?: string;
-}): string {
-  if (ad.description && ad.description.trim().length > 0) {
-    return ad.description.trim();
+} | null): string {
+  if (!ad) {
+    return 'Connecting with new friends and active groups. Say hello and let’s chat!';
+  }
+
+  if (ad.description) {
+    if (typeof ad.description === 'string' && ad.description.trim().length > 0) {
+      return ad.description.trim();
+    }
+    if (typeof ad.description === 'object' && ad.description !== null) {
+      const candidate = ad.description.text || ad.description.description;
+      if (typeof candidate === 'string' && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
   }
 
   const isSnap = ad.platform === 'snapchat';
@@ -407,6 +439,80 @@ export async function compressCoverImageFile(
             targetWidth,
             targetHeight
           );
+
+          let dataUrl = canvas.toDataURL('image/webp', quality);
+          if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', quality);
+          }
+
+          const approxBytes = Math.round((dataUrl.length * 3) / 4);
+          const sizeKb = Math.round((approxBytes / 1024) * 10) / 10;
+
+          resolve({
+            dataUrl,
+            sizeKb,
+          });
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      img.src = event.target?.result as string;
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Compresses screenshot proofs submitted for Snapchat adds.
+ * Preserves the original screenshot aspect ratio while scaling to max 720px and ~50-80KB.
+ */
+export async function compressScreenshotProofFile(
+  file: File,
+  maxDimension = 720,
+  quality = 0.72
+): Promise<{ dataUrl: string; sizeKb: number }> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      return reject(new Error('Please select a valid screenshot image file (JPG, PNG, WebP).'));
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read screenshot file.'));
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Failed to parse screenshot image.'));
+      img.onload = () => {
+        try {
+          const srcW = img.naturalWidth || img.width;
+          const srcH = img.naturalHeight || img.height;
+
+          let targetW = srcW;
+          let targetH = srcH;
+
+          if (srcW > maxDimension || srcH > maxDimension) {
+            if (srcW > srcH) {
+              targetW = maxDimension;
+              targetH = Math.round((srcH * maxDimension) / srcW);
+            } else {
+              targetH = maxDimension;
+              targetW = Math.round((srcW * maxDimension) / srcH);
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            return reject(new Error('Failed to initialize canvas.'));
+          }
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, targetW, targetH);
 
           let dataUrl = canvas.toDataURL('image/webp', quality);
           if (!dataUrl.startsWith('data:image/webp')) {

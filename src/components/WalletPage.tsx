@@ -97,7 +97,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
     }
     navigator.clipboard.writeText(referralLink);
     setCopiedLink(true);
-    onToast("Referral link copied! Share with friends to earn +10 Credits 🎁");
+    onToast("Referral link copied! Share with friends to earn +10 Points 🎁");
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
@@ -106,7 +106,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
       onRequireAuth();
       return;
     }
-    const text = encodeURIComponent(`Add my Snapchat & WhatsApp on AddMeUp! Use my invite link to get +10 FREE bonus credits: ${referralLink}`);
+    const text = encodeURIComponent(`Add my Snapchat & WhatsApp on AddMeUp! Use my invite link to get +10 FREE bonus points: ${referralLink}`);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
@@ -142,10 +142,10 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                 <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                   {balance.toLocaleString()}
                 </span>
-                <span className="text-orange-600 font-extrabold text-sm">Credits 🪙</span>
+                <span className="text-orange-600 font-extrabold text-sm">Points 🪙</span>
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5 font-medium leading-tight">
-                100 Credits = ₦1,000 NGN. Use credits to feature your Snapchat & WhatsApp ads.
+                100 Points = ₦1,000 NGN. Use points to feature your Snapchat & WhatsApp ads.
               </p>
             </div>
 
@@ -187,8 +187,8 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                 </div>
                 <p className="text-[10px] text-slate-500 font-medium">
                   {profile?.lastDailyBonusDate === new Date().toISOString().split('T')[0]
-                    ? "Claimed today! Check back tomorrow for more credits."
-                    : "Bonus ready! Check Feed to claim free credits."}
+                    ? "Claimed today! Check back tomorrow for more points."
+                    : "Bonus ready! Check Feed to claim free points."}
                 </p>
               </div>
             </div>
@@ -206,12 +206,12 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                 </h3>
               </div>
               <span className="text-[9px] font-black bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full border border-purple-200">
-                +10 Cr Each 🎁
+                +10 Pts Each 🎁
               </span>
             </div>
 
             <p className="text-[11px] text-slate-600 font-medium leading-snug">
-              Give friends <strong>+10 bonus credits</strong> when they join. You earn <strong>+10 credits</strong> for every referral!
+              Give friends <strong>+10 bonus points</strong> when they join. You earn <strong>+10 points</strong> for every referral!
             </p>
 
             {/* Referral Link Copy Bar */}
@@ -270,7 +270,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                   className="p-2 rounded-xl bg-white/70 hover:bg-orange-50/70 border border-slate-200 hover:border-orange-300 text-left transition-all group"
                 >
                   <div className="flex items-center justify-between text-[11px] font-extrabold text-slate-900 group-hover:text-orange-600">
-                    <span>{pkg.credits} Cr</span>
+                    <span>{pkg.credits} Pts</span>
                     <span className="font-mono font-bold text-slate-800">₦{pkg.priceNgn.toLocaleString('en-NG')}</span>
                   </div>
                   <div className="text-[9px] text-slate-400 font-medium mt-0.5 leading-tight">
@@ -305,7 +305,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
 
           {!userUid ? (
             <div className="glass-card border border-slate-200/80 rounded-2xl p-4 text-center space-y-1.5">
-              <p className="text-xs text-slate-600 font-medium">Sign in to view your full credit history.</p>
+              <p className="text-xs text-slate-600 font-medium">Sign in to view your full point history.</p>
               <button
                 onClick={onRequireAuth}
                 className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[11px] font-black shadow-xs inline-block"
@@ -321,7 +321,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
           ) : transactions.length === 0 ? (
             <div className="glass-card border border-slate-200/80 rounded-2xl p-4 text-center space-y-1">
               <p className="text-xs text-slate-600 font-semibold">No transactions recorded yet.</p>
-              <p className="text-[10px] text-slate-400">Deposit credits or tap on ads in the feed to get started!</p>
+              <p className="text-[10px] text-slate-400">Deposit points or tap on ads in the feed to get started!</p>
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -358,7 +358,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
 
                       <div>
                         <h4 className="text-[11px] font-bold text-slate-900 leading-tight">
-                          {tx.description || (isPositive ? 'Earned Credits' : 'Spent Credits')}
+                          {tx.description || (isPositive ? 'Earned Points' : 'Spent Points')}
                         </h4>
                         <p className="text-[9px] text-slate-400 font-medium leading-tight mt-0.5">
                           {new Date(tx.createdAt).toLocaleDateString()} at {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -377,7 +377,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                           ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                           : 'bg-amber-50 text-amber-800 border-amber-200'
                       }`}>
-                        {isPositive ? `+${tx.amount}` : `${tx.amount}`} Cr
+                        {isPositive ? `+${tx.amount}` : `${tx.amount}`} Pts
                       </div>
                       {tx.amountNgn && (
                         <div className="text-[9px] text-slate-400 font-mono mt-0.5">

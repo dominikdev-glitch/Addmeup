@@ -24,7 +24,6 @@ import {
   ArrowRight, 
   Trash2, 
   CheckCheck,
-  Sparkles,
   BellRing,
   Volume2
 } from 'lucide-react';

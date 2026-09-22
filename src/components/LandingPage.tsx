@@ -70,7 +70,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           {/* Subtitle */}
           <p className="text-sm sm:text-base text-slate-600 font-medium leading-relaxed max-w-2xl mx-auto">
-            Join thousands of active users sharing handles daily on AddMeUp. Post your handle, add real profiles to earn free promotional credits, and run targeted campaigns instantly.
+            Join thousands of active users sharing handles daily on AddMeUp. Post your handle, add real profiles to earn free promotional points, and run targeted campaigns instantly.
           </p>
 
           {/* CTA Group */}
@@ -79,7 +79,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={onOpenAuthModal}
               className="w-full sm:w-auto px-8 py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all active:scale-95"
             >
-              <span>Create Account • Get +20 Free Credits</span>
+              <span>Create Account • Get +20 Free Points</span>
             </button>
           </div>
 
@@ -91,7 +91,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </span>
             <span className="flex items-center gap-1.5">
               <Coins className="w-4 h-4 text-amber-500" />
-              <span>+20 Welcome Credits</span>
+              <span>+20 Welcome Points</span>
             </span>
             <span className="flex items-center gap-1.5">
               <Zap className="w-4 h-4 text-orange-500" />
@@ -118,7 +118,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     👻 Snapchat • Fitness
                   </span>
                   <span className="text-[10px] text-emerald-700 font-black bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    +5 Credits
+                    +5 Points
                   </span>
                 </div>
                 <h3 className="font-extrabold text-slate-900 text-sm mb-1">
@@ -145,7 +145,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     💬 WhatsApp • Business
                   </span>
                   <span className="text-[10px] text-emerald-700 font-black bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    +5 Credits
+                    +5 Points
                   </span>
                 </div>
                 <h3 className="font-extrabold text-slate-900 text-sm mb-1">
@@ -172,7 +172,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     👻 Snapchat • Gaming
                   </span>
                   <span className="text-[10px] text-emerald-700 font-black bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    +5 Credits
+                    +5 Points
                   </span>
                 </div>
                 <h3 className="font-extrabold text-slate-900 text-sm mb-1">
@@ -209,7 +209,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <h3 className="text-sm font-extrabold text-slate-900">Create Account</h3>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Sign in with Google in seconds. Instantly receive +20 free promotional credits in your AddMeUp wallet.
+                Sign in with Google in seconds. Instantly receive +20 free promotional points in your AddMeUp wallet.
               </p>
             </div>
 
@@ -219,7 +219,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <h3 className="text-sm font-extrabold text-slate-900">Add Members & Earn</h3>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Browse the live feed, tap to open Snapchat or WhatsApp, add members, and claim +5 credits per valid add.
+                Browse the live feed, tap to open Snapchat or WhatsApp, add members, and claim +5 points per valid add.
               </p>
             </div>
 
@@ -229,7 +229,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <h3 className="text-sm font-extrabold text-slate-900">Promote Your Handle</h3>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Choose flexible durations (6hrs for 100cr, 12hrs for 200cr, 24hrs for 450cr, 7 days, or 1 month). Your handle stays pinned for top reach.
+                Choose flexible durations (6hrs for 100pts, 12hrs for 200pts, 24hrs for 450pts, 7 days, or 1 month). Your handle stays pinned for top reach.
               </p>
             </div>
 
@@ -252,7 +252,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="space-y-1">
                 <h3 className="text-xs font-extrabold text-slate-900">Instant Paystack NGN Deposits</h3>
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Top up credits securely via Paystack with Nigerian Debit Cards, Bank Transfer, USSD, or OPay (₦1,000 = 100 Credits).
+                  Top up points securely via Paystack with Nigerian Debit Cards, Bank Transfer, USSD, or OPay (₦1,000 = 100 Points).
                 </p>
               </div>
             </div>
@@ -264,7 +264,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="space-y-1">
                 <h3 className="text-xs font-extrabold text-slate-900">Fair Play Verification</h3>
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Smart 10-second verification timer ensures users genuinely open Snapchat or WhatsApp before claiming credits.
+                  Smart 10-second verification timer ensures users genuinely open Snapchat or WhatsApp before claiming points.
                 </p>
               </div>
             </div>
@@ -274,9 +274,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 🪙
               </div>
               <div className="space-y-1">
-                <h3 className="text-xs font-extrabold text-slate-900">Earn Free Ad Credits</h3>
+                <h3 className="text-xs font-extrabold text-slate-900">Earn Free Ad Points</h3>
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Add members and businesses directly from the feed to earn +5 credits every time with zero daily limits.
+                  Add members and businesses directly from the feed to earn +5 points every time with zero daily limits.
                 </p>
               </div>
             </div>
@@ -303,7 +303,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Ready to Grow Your Handles Today?
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed">
-              Join AddMeUp in less than 30 seconds. Claim your +20 free credits and start earning today.
+              Join AddMeUp in less than 30 seconds. Claim your +20 free points and start earning today.
             </p>
           </div>
 

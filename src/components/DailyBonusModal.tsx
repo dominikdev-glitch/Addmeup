@@ -5,7 +5,7 @@ import {
   Flame, 
   Gift, 
   Check, 
-  Sparkles, 
+  Coins, 
   Calendar,
   AlertCircle
 } from 'lucide-react';
@@ -97,7 +97,7 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
           Daily Check-in Streak
         </h2>
         <p className="text-[11px] text-slate-300 mt-0.5">
-          Visit AddMeUp daily to claim free credits and keep your streak burning!
+          Visit AddMeUp daily to claim free points and keep your streak burning!
         </p>
 
         {/* Streak Counter Badge */}
@@ -131,7 +131,7 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
                     ) : item.isSpecial ? (
                       <Gift className="w-3 h-3 text-amber-400 mx-auto" />
                     ) : (
-                      <Sparkles className="w-2.5 h-2.5 mx-auto opacity-70" />
+                      <Coins className="w-2.5 h-2.5 mx-auto opacity-70" />
                     )}
                   </div>
                   <span className="text-[9px] font-mono font-bold">+{item.credits}</span>
@@ -140,9 +140,9 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
             })}
           </div>
           <div className="flex items-center justify-between text-[9px] text-slate-400 mt-2 px-1">
-            <span>Day 1-2: 2 Cr</span>
-            <span>Day 3-6: 3 Cr</span>
-            <span className="text-amber-300 font-bold">Day 7+: 5 Cr VIP 🎁</span>
+            <span>Day 1-2: 2 Pts</span>
+            <span>Day 3-6: 3 Pts</span>
+            <span className="text-amber-300 font-bold">Day 7+: 5 Pts VIP 🎁</span>
           </div>
         </div>
 
@@ -150,7 +150,7 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
         {successInfo ? (
           <div className="space-y-2 py-1 animate-fade-in">
             <div className="bg-emerald-500/20 border border-emerald-400/50 p-2.5 rounded-xl text-emerald-300 text-xs font-bold">
-              🎉 Claimed +{successInfo.credits} Free Credits! Streak is at {successInfo.streak} days.
+              🎉 Claimed +{successInfo.credits} Free Points! Streak is at {successInfo.streak} days.
             </div>
             <button
               onClick={onClose}
@@ -183,7 +183,7 @@ export const DailyBonusModal: React.FC<DailyBonusModalProps> = ({
               className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500 hover:opacity-95 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-1.5 transform active:scale-95 disabled:opacity-50"
             >
               <Gift className="w-4 h-4" />
-              <span>{isLoading ? 'Claiming...' : `Claim Today's Bonus (+${daysTrack[activeDayIndex]?.credits || 2} Cr)`}</span>
+              <span>{isLoading ? 'Claiming...' : `Claim Today's Bonus (+${daysTrack[activeDayIndex]?.credits || 2} Pts)`}</span>
             </button>
 
             {errorMessage && (

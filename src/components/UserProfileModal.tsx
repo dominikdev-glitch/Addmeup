@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { X, LogOut, Check, User, Save } from 'lucide-react';
+import { X, LogOut, Check, User, Save, ShieldAlert } from 'lucide-react';
 import { PlatformIcon } from './PlatformIcon';
 import { AvatarPicker } from './AvatarPicker';
 
@@ -10,6 +10,7 @@ interface UserProfileModalProps {
   onUpdateHandles: (snapchat: string, whatsapp: string, username?: string, photoUrl?: string) => Promise<void>;
   onSignOut: () => void;
   onToast: (msg: string) => void;
+  onOpenAdmin?: () => void;
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -18,6 +19,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onUpdateHandles,
   onSignOut,
   onToast,
+  onOpenAdmin,
 }) => {
   const [username, setUsername] = useState(profile?.username || '');
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(profile?.photoUrl || undefined);
@@ -124,6 +126,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <span>{isSaving ? 'Saving...' : 'Save Profile'}</span>
           </button>
         </form>
+
+        {/* Admin Dashboard Quick Launch for Admins */}
+        {profile?.isAdmin && onOpenAdmin && (
+          <div className="mt-3 pt-3 border-t border-slate-200/60">
+            <button
+              onClick={() => {
+                onClose();
+                onOpenAdmin();
+              }}
+              className="w-full py-2 bg-gradient-to-r from-rose-600 to-amber-600 hover:brightness-110 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all shadow-xs"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Open Admin Dashboard</span>
+            </button>
+          </div>
+        )}
 
         {/* Sign Out Button */}
         <div className="mt-4 pt-3 border-t border-slate-200/60">

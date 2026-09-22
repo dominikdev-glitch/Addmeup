@@ -59,7 +59,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
 
   const handlePayWithGateway = async () => {
     if (!userUid) {
-      onToast("Please sign in to deposit credits.");
+      onToast("Please sign in to deposit points.");
       return;
     }
 
@@ -94,7 +94,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 setLastRef(paystackRef);
                 setLastGateway('Paystack Nigeria');
                 setStep('success');
-                onToast(`Payment Confirmed via Paystack! +${totalCredits} Credits added! 🪙`);
+                onToast(`Payment Confirmed via Paystack! +${totalCredits} Points added! 🪙`);
               }
             } catch (depositErr: any) {
               console.error("Deposit processing error:", depositErr);
@@ -131,7 +131,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   // Instant Verification Helper for sandbox / preview / direct transfer verification
   const handleSimulatedGatewaySuccess = async (gatewayName: string = gateway === 'paystack' ? 'Paystack Sandbox' : 'Flutterwave Sandbox') => {
     if (!userUid) {
-      onToast("Please sign in to deposit credits.");
+      onToast("Please sign in to deposit points.");
       return;
     }
 
@@ -155,7 +155,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
         setLastRef(mockRef);
         setLastGateway(gatewayName);
         setStep('success');
-        onToast(`Payment Verified! +${totalCredits} Credits added to wallet! 🪙`);
+        onToast(`Payment Verified! +${totalCredits} Points added to wallet! 🪙`);
       }
     } catch (err: any) {
       console.error("Simulated deposit error:", err);
@@ -190,11 +190,11 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 🪙
               </div>
               <div>
-                <h2 className="text-base font-black text-slate-900 leading-tight">Deposit Credits</h2>
+                <h2 className="text-base font-black text-slate-900 leading-tight">Deposit Points</h2>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[11px] text-slate-500 font-medium">₦1,000 NGN = 100 Credits</span>
+                  <span className="text-[11px] text-slate-500 font-medium">₦1,000 NGN = 100 Points</span>
                   <span className="text-[9px] bg-orange-50 text-orange-700 font-bold px-1.5 py-0.2 rounded-md border border-orange-200">
-                    Instant Credit
+                    Instant Top-up
                   </span>
                 </div>
               </div>
@@ -203,7 +203,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
             {/* Quick Packages Grid */}
             <div className="space-y-1.5">
               <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                Select Credit Package
+                Select Point Package
               </label>
 
               <div className="grid grid-cols-2 gap-2">
@@ -236,7 +236,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
 
                       <div className="font-extrabold text-xs text-slate-900 flex items-center gap-1">
                         <span>{pkg.credits}</span>
-                        <span className="text-[10px] text-orange-600 font-bold">Credits</span>
+                        <span className="text-[10px] text-orange-600 font-bold">Points</span>
                       </div>
 
                       {pkg.bonusCredits ? (
@@ -265,13 +265,13 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 onClick={() => setIsCustom(!isCustom)}
                 className="text-[11px] text-orange-600 hover:text-orange-700 font-bold underline inline-flex items-center gap-1"
               >
-                <span>{isCustom ? "Choose standard packages" : "Need custom credits amount?"}</span>
+                <span>{isCustom ? "Choose standard packages" : "Need custom points amount?"}</span>
               </button>
 
               {isCustom && (
                 <div className="mt-2 p-2.5 rounded-xl bg-white/80 border border-slate-200 space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                    <span>Custom Credits (Min 100):</span>
+                    <span>Custom Points (Min 100):</span>
                     <span className="font-mono text-orange-600 font-black">₦{(customCredits * 10).toLocaleString('en-NG')} NGN</span>
                   </div>
                   <input
@@ -326,7 +326,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 <span className="text-[11px] text-slate-600 font-bold">Total to Pay:</span>
                 <div className="text-right">
                   <div className="text-sm text-slate-900 font-mono font-bold">₦{totalNgn.toLocaleString('en-NG')} NGN</div>
-                  <div className="text-[10px] font-extrabold text-orange-600">for {totalCredits} Credits 🪙</div>
+                  <div className="text-[10px] font-extrabold text-orange-600">for {totalCredits} Points 🪙</div>
                 </div>
               </div>
 
@@ -356,7 +356,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                   {gateway === 'paystack' ? 'Paystack' : 'Flutterwave'} Checkout
                 </h2>
                 <p className="text-xs text-slate-500 font-medium">
-                  Depositing ₦{totalNgn.toLocaleString('en-NG')} NGN ({totalCredits} Credits)
+                  Depositing ₦{totalNgn.toLocaleString('en-NG')} NGN ({totalCredits} Points)
                 </p>
               </div>
               <button
@@ -469,7 +469,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
             <div>
               <h2 className="text-xl font-black text-slate-900">Deposit Confirmed!</h2>
               <p className="text-xs text-slate-500 mt-1 font-medium">
-                Your wallet has been credited with <strong className="text-orange-600 font-black">+{totalCredits} Credits</strong>.
+                Your wallet has been credited with <strong className="text-orange-600 font-black">+{totalCredits} Points</strong>.
               </p>
             </div>
 
@@ -483,8 +483,8 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 <span className="font-bold text-slate-900">₦{totalNgn.toLocaleString('en-NG')} NGN</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 font-sans">Credits Added:</span>
-                <span className="font-bold text-emerald-600">+{totalCredits} Credits 🪙</span>
+                <span className="text-slate-500 font-sans">Points Added:</span>
+                <span className="font-bold text-emerald-600">+{totalCredits} Points 🪙</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500 font-sans">Reference:</span>

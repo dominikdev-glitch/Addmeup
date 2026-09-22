@@ -38,6 +38,8 @@ export interface UserProfile {
   email?: string;
   photoUrl?: string;
   creditBalance: number;
+  isAdmin?: boolean;
+  isBanned?: boolean;
   snapchatHandle?: string;
   whatsappNumber?: string;
   referralCode?: string;
@@ -89,6 +91,8 @@ export interface Claim {
   claimerDisplayName: string;
   verificationCode?: string; // e.g. "AD-8492" for WhatsApp
   claimerSnapchatHandle?: string; // e.g. "@alex_streaks" for Snapchat
+  proofImageUrl?: string; // optional screenshot proof attached by earner
+  deviceFingerprint?: string;
   status: ClaimStatus;
   creditsAwarded: number;
   createdAt: number;
@@ -102,7 +106,7 @@ export interface Transaction {
   transactionId: string;
   userId: string;
   amount: number; // positive for earned/deposited, negative for spent
-  type: 'earned_ad_click' | 'placed_ad' | 'deposit' | 'daily_bonus' | 'referral_bonus' | 'boost_ad';
+  type: 'earned_ad_click' | 'placed_ad' | 'deposit' | 'daily_bonus' | 'referral_bonus' | 'boost_ad' | 'admin_adjustment';
   referenceId?: string;
   amountNgn?: number;
   paymentMethod?: string;

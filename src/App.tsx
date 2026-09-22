@@ -12,6 +12,7 @@ import { MyAdsModal } from './components/MyAdsModal';
 import { DailyBonusModal } from './components/DailyBonusModal';
 import { BoostModal } from './components/BoostModal';
 import { AuthModal } from './components/AuthModal';
+import { AdminPage } from './components/AdminPage';
 import { MobileInstallPrompt } from './components/MobileInstallPrompt';
 import { Logo } from './components/Logo';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
@@ -39,6 +40,7 @@ export default function App() {
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showMyAdsModal, setShowMyAdsModal] = useState(false);
   const [showDailyBonusModal, setShowDailyBonusModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedAdForBoost, setSelectedAdForBoost] = useState<Ad | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -63,7 +65,18 @@ export default function App() {
       (snapshot) => {
         const adsList: Ad[] = [];
         snapshot.forEach((doc) => {
-          adsList.push(doc.data() as Ad);
+          try {
+            const raw = doc.data() as any;
+            if (!raw) return;
+            adsList.push({
+              ...raw,
+              adId: raw.adId || doc.id,
+              imageUrl: typeof raw.imageUrl === 'object' && raw.imageUrl ? (raw.imageUrl.dataUrl || raw.imageUrl.url) : raw.imageUrl,
+              avatarUrl: typeof raw.avatarUrl === 'object' && raw.avatarUrl ? (raw.avatarUrl.dataUrl || raw.avatarUrl.url) : raw.avatarUrl,
+            } as Ad);
+          } catch (err) {
+            console.warn("Skipping invalid user ad document:", doc.id, err);
+          }
         });
         setUserAds(adsList);
       },
@@ -208,6 +221,7 @@ export default function App() {
         onSignIn={() => setShowAuthModal(true)}
         onOpenMyAds={() => setShowMyAdsModal(true)}
         onOpenDailyBonus={() => setShowDailyBonusModal(true)}
+        onOpenAdmin={() => setShowAdminModal(true)}
       />
 
       {/* Main Content Viewport */}
@@ -317,7 +331,7 @@ export default function App() {
             setSelectedAdForBoost(ad);
           }}
           onBalanceUpdated={(newBalance) => {
-            showToast(`Balance updated: ${newBalance} Cr`);
+            showToast(`Balance updated: ${newBalance} Pts`);
           }}
         />
       )}
@@ -329,7 +343,7 @@ export default function App() {
           profile={profile}
           onClose={() => setShowDailyBonusModal(false)}
           onBonusClaimed={(creditsAwarded) => {
-            showToast(`Day streak bonus claimed: +${creditsAwarded} Free Credits! 🎁🔥`);
+            showToast(`Day streak bonus claimed: +${creditsAwarded} Free Points! 🎁🔥`);
           }}
         />
       )}
@@ -354,6 +368,15 @@ export default function App() {
         />
       )}
 
+      {/* Admin Panel Modal for Admins */}
+      {showAdminModal && profile && (
+        <AdminPage
+          currentProfile={profile}
+          onClose={() => setShowAdminModal(false)}
+          onToast={showToast}
+        />
+      )}
+
       {/* User Profile Settings Modal */}
       {showProfileModal && (
         <UserProfileModal
@@ -362,6 +385,7 @@ export default function App() {
           onUpdateHandles={updateHandles}
           onSignOut={signOut}
           onToast={showToast}
+          onOpenAdmin={() => setShowAdminModal(true)}
         />
       )}
 

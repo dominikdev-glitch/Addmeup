@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { CategoryType, PlatformType, UserProfile, AdDurationConfig } from '../types';
 import { AD_DURATIONS, publishAd } from '../lib/transactions';
 import { DepositModal } from './DepositModal';
-import { AlertCircle, ArrowRight, Clock, Plus, Coins, Upload, Sparkles, Image as ImageIcon, Check } from 'lucide-react';
+import { AlertCircle, ArrowRight, Clock, Plus, Coins, Upload, Image as ImageIcon, Check } from 'lucide-react';
 import { PlatformIcon } from './PlatformIcon';
 import { AvatarPicker } from './AvatarPicker';
 import { 
@@ -57,8 +57,8 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
 
     try {
       setIsUploadingCover(true);
-      const compressedDataUrl = await compressCoverImageFile(file);
-      setImageUrl(compressedDataUrl);
+      const { dataUrl } = await compressCoverImageFile(file);
+      setImageUrl(dataUrl);
       onToast('Cover photo uploaded & optimized! 📸');
     } catch (err: any) {
       console.error('Cover upload error:', err);
@@ -90,7 +90,7 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
     }
 
     if (!hasEnoughCredits) {
-      setErrorMessage(`You need ${adCost - userBalance} more credits for this duration.`);
+      setErrorMessage(`You need ${adCost - userBalance} more points for this duration.`);
       return;
     }
 
@@ -98,11 +98,23 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
       setIsSubmitting(true);
       setErrorMessage(null);
 
+      const resolvedImageUrl = typeof imageUrl === 'string' && imageUrl.trim().length > 0
+        ? imageUrl.trim()
+        : (typeof imageUrl === 'object' && imageUrl !== null && (imageUrl as any).dataUrl
+          ? (imageUrl as any).dataUrl
+          : undefined);
+
+      const resolvedAvatarUrl = typeof avatarUrl === 'string' && avatarUrl.trim().length > 0
+        ? avatarUrl.trim()
+        : (typeof avatarUrl === 'object' && avatarUrl !== null && (avatarUrl as any).dataUrl
+          ? (avatarUrl as any).dataUrl
+          : undefined);
+
       const result = await publishAd({
         userId: userUid,
         title: title.trim(),
         description: description.trim() || undefined,
-        imageUrl: imageUrl || undefined,
+        imageUrl: resolvedImageUrl,
         category,
         platform,
         targetHandleOrNumber: targetHandleOrNumber.trim(),
@@ -110,7 +122,7 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
         costCredits: selectedDuration.costCredits,
         durationLabel: selectedDuration.label,
         userDisplayName: profile?.username || 'Social Member',
-        avatarUrl: avatarUrl || undefined,
+        avatarUrl: resolvedAvatarUrl,
       });
 
       if (result.success) {
@@ -147,7 +159,7 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
         <div className="flex items-center gap-1.5">
           <div className="font-extrabold text-[11px] text-amber-900 bg-amber-100/90 px-2.5 py-1 rounded-full border border-amber-200 shadow-2xs flex items-center gap-1">
             <span>🪙</span>
-            <span>{userBalance.toLocaleString()} Cr</span>
+            <span>{userBalance.toLocaleString()} Pts</span>
           </div>
           <button
             type="button"
@@ -333,8 +345,8 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
             {/* Quick Preset Covers */}
             <div>
               <p className="text-[10px] text-slate-400 font-semibold mb-1.5 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-500" />
-                <span>Or pick an aesthetic visual preset:</span>
+                <ImageIcon className="w-3 h-3 text-slate-400" />
+                <span>Or pick a cover banner preset:</span>
               </p>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {PRESET_COVER_BANNERS.map((preset) => {
@@ -436,11 +448,11 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
             </div>
           )}
 
-          {/* Insufficient Credits Banner */}
+          {/* Insufficient Points Banner */}
           {!hasEnoughCredits && (
             <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-2xl space-y-2 text-center">
               <p className="text-xs text-amber-900 font-bold">
-                You have {userBalance} credits. You need {adCost - userBalance} more for {selectedDuration.label} ({adCost} Cr).
+                You have {userBalance} points. You need {adCost - userBalance} more for {selectedDuration.label} ({adCost} Pts).
               </p>
               <div className="grid grid-cols-2 gap-2 pt-0.5">
                 <button
@@ -477,7 +489,7 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
             <span>
               {isSubmitting
                 ? 'Publishing Ad...'
-                : `Post Ad (${selectedDuration.label}) • ${selectedDuration.costCredits} Credits`}
+                : `Post Ad (${selectedDuration.label}) • ${selectedDuration.costCredits} Points`}
             </span>
           </button>
 
@@ -529,7 +541,7 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
 
                 <div className="bg-orange-500 text-white border border-orange-300/60 px-2.5 py-0.8 rounded-full text-[11px] font-black flex items-center gap-1 shadow-md backdrop-blur-md">
                   <span>🪙</span>
-                  <span>+5 Cr</span>
+                  <span>+5 Pts</span>
                 </div>
               </div>
 
@@ -581,7 +593,7 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
                     <Clock className="w-3 h-3 text-orange-500" />
                     <span>Duration: {selectedDuration.label}</span>
                   </span>
-                  <span className="font-extrabold text-orange-600">{selectedDuration.costCredits} Credits</span>
+                  <span className="font-extrabold text-orange-600">{selectedDuration.costCredits} Points</span>
                 </div>
                 <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
                   <div
@@ -601,7 +613,7 @@ export const PostAdPage: React.FC<PostAdPageProps> = ({
                 }`}
               >
                 <PlatformIcon platform={platform} size="sm" />
-                <span>Tap to Add & Earn +5 Credits</span>
+                <span>Tap to Add & Earn +5 Points</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </div>
             </div>

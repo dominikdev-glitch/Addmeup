@@ -7,7 +7,7 @@ import {
   Lock, 
   User, 
   ArrowRight, 
-  Sparkles,
+  Coins,
   AlertCircle,
   ExternalLink,
   CheckCircle2,
@@ -161,7 +161,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         <h2 className="text-xl font-black text-slate-900 leading-tight">Welcome to AddMeUp</h2>
         <p className="text-xs text-slate-500 mt-1 leading-snug font-medium max-w-xs mx-auto">
-          Sign in to add handles, earn promotional credits, and grow your audience.
+          Sign in to add handles, earn promotional points, and grow your audience.
         </p>
 
         {/* Mode Selector Tabs */}
@@ -409,8 +409,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </>
               ) : (
                 <>
-                  <span>Create Account & Claim +20 Credits</span>
-                  <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                  <span>Create Account & Claim +20 Points</span>
+                  <Coins className="w-3.5 h-3.5 text-amber-200" />
                 </>
               )}
             </button>
@@ -428,7 +428,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     }}
                     className="text-orange-600 font-black hover:underline"
                   >
-                    Register free (+20 Cr)
+                    Register free (+20 Pts)
                   </button>
                 </p>
               ) : (

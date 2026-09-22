@@ -10,10 +10,7 @@ import {
   Share2, 
   Eye, 
   MousePointerClick,
-  PauseCircle,
-  Copy,
-  Check,
-  Sparkles
+  PauseCircle
 } from 'lucide-react';
 import { PlatformIcon } from './PlatformIcon';
 import { getEffectiveAvatar, getEffectiveAdCover, getEffectiveAdDescription } from '../lib/avatar';
@@ -38,15 +35,13 @@ export const AdCard: React.FC<AdCardProps> = ({
   onSelectAd, 
   onReportAd,
   currentUserId,
-  onBoostAd
+  onBoostAd,
 }) => {
   const [timeLeft, setTimeLeft] = useState<string>('');
   const [isExpired, setIsExpired] = useState<boolean>(false);
   const [progressPercent, setProgressPercent] = useState<number>(100);
   const [boostTimeLeft, setBoostTimeLeft] = useState<string>('');
   const [creatorUser, setCreatorUser] = useState<UserProfile | null>(null);
-  const [isCopied, setIsCopied] = useState<boolean>(false);
-
   const isBoosted = Boolean(ad.boostedUntil && ad.boostedUntil > Date.now());
   const isOwner = Boolean(currentUserId && currentUserId === ad.userId);
   const isPaused = ad.status === 'paused';
@@ -142,14 +137,6 @@ export const AdCard: React.FC<AdCardProps> = ({
   const effectiveCover = getEffectiveAdCover(ad);
   const effectiveDescription = getEffectiveAdDescription(ad);
 
-  const handleCopyHandle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    triggerHaptic('medium');
-    navigator.clipboard.writeText(ad.targetHandleOrNumber);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
-
   return (
     <div className={`bg-white rounded-3xl border transition-all duration-300 hover:shadow-xl relative group flex flex-col justify-between overflow-hidden ${
       isBoosted 
@@ -202,7 +189,7 @@ export const AdCard: React.FC<AdCardProps> = ({
 
               <div className="bg-orange-500/90 hover:bg-orange-500 text-white border border-orange-300/60 px-2.5 py-0.8 rounded-full text-[11px] font-black flex items-center gap-1 shadow-md backdrop-blur-md">
                 <span>🪙</span>
-                <span>+{ad.rewardPerAdd || 5} Cr</span>
+                <span>+{ad.rewardPerAdd || 5} Pts</span>
               </div>
             </div>
           </div>
@@ -226,11 +213,11 @@ export const AdCard: React.FC<AdCardProps> = ({
                 </div>
               </div>
 
-              {/* Creator & Handle Info */}
+              {/* Creator & Verification Badges */}
               <div className="text-white space-y-0.5">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-mono font-black text-xs sm:text-sm text-white drop-shadow-md tracking-tight">
-                    {ad.targetHandleOrNumber}
+                  <span className="font-extrabold text-xs sm:text-sm text-white drop-shadow-md tracking-tight">
+                    {ad.userDisplayName || 'Social Member'}
                   </span>
                   {creatorBadge && (
                     <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[9px] font-black border shadow-xs ${creatorBadge.bgClass} ${creatorBadge.colorClass} ${creatorBadge.borderClass}`}>
@@ -241,7 +228,7 @@ export const AdCard: React.FC<AdCardProps> = ({
                 </div>
 
                 <p className="text-[11px] text-slate-300 font-medium drop-shadow-xs flex items-center gap-1">
-                  <span>by {ad.userDisplayName || 'Social Member'}</span>
+                  <span>{isSnapchat ? 'Snapchat Connect' : 'WhatsApp Connect'}</span>
                   {isPaused && (
                     <span className="px-1.5 py-0.2 bg-amber-400/90 text-slate-950 font-black rounded-md text-[9px]">
                       Paused
@@ -260,7 +247,7 @@ export const AdCard: React.FC<AdCardProps> = ({
                   triggerHaptic('light');
                   triggerNativeShare({
                     title: `${ad.title} on AddMeUp`,
-                    text: `Connect with ${ad.targetHandleOrNumber} on ${ad.platform === 'snapchat' ? 'Snapchat' : 'WhatsApp'}! Earn credits on AddMeUp.`,
+                    text: `Connect with ${ad.userDisplayName || 'creator'} on ${ad.platform === 'snapchat' ? 'Snapchat' : 'WhatsApp'}! Earn points on AddMeUp.`,
                     url: window.location.href,
                   });
                 }}
@@ -290,7 +277,6 @@ export const AdCard: React.FC<AdCardProps> = ({
 
         {/* Card Body: Title, Description & Metadata */}
         <div className="p-4 sm:p-5 space-y-3">
-          
           {/* Main Title */}
           <div>
             <h3 
@@ -308,29 +294,15 @@ export const AdCard: React.FC<AdCardProps> = ({
             </p>
           </div>
 
-          {/* Quick Copy Handle Bar */}
-          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-orange-50/60 border border-orange-200/60">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-orange-800">
-                {isSnapchat ? 'Snap ID:' : 'WhatsApp:'}
-              </span>
-              <span className="font-mono text-xs font-bold text-slate-800 truncate">
-                {ad.targetHandleOrNumber}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleCopyHandle}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black transition-all active:scale-95 shadow-2xs ${
-                isCopied 
-                  ? 'bg-emerald-600 text-white' 
-                  : 'bg-white hover:bg-orange-100 text-orange-950 border border-orange-200'
-              }`}
-            >
-              {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-              <span>{isCopied ? 'Copied!' : 'Copy'}</span>
-            </button>
+          {/* Direct Verified Link Notice - removes manual phone copying so users use the tracking link */}
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-orange-50/60 border border-orange-200/50 text-[11px]">
+            <span className="text-orange-950 font-bold flex items-center gap-1.5 truncate">
+              <span>⚡</span>
+              <span className="truncate">Tap below to open {isSnapchat ? 'Snapchat' : 'WhatsApp'} & earn points</span>
+            </span>
+            <span className="text-[10px] font-black text-orange-600 bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs whitespace-nowrap">
+              Direct Link
+            </span>
           </div>
 
           {/* Countdown Timer & Campaign Progress */}
@@ -408,7 +380,7 @@ export const AdCard: React.FC<AdCardProps> = ({
         ) : isClaimed ? (
           <div className="w-full py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-center text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Claimed & Credited (+{ad.rewardPerAdd || 5} Cr)</span>
+            <span>Claimed & Rewarded (+{ad.rewardPerAdd || 5} Pts)</span>
           </div>
         ) : (
           <button
@@ -423,7 +395,7 @@ export const AdCard: React.FC<AdCardProps> = ({
             }`}
           >
             <PlatformIcon platform={ad.platform} size="sm" />
-            <span>Tap to Add & Earn +{ad.rewardPerAdd || 5} Credits</span>
+            <span>Tap to Add & Earn +{ad.rewardPerAdd || 5} Points</span>
             <ExternalLink className="w-4 h-4 opacity-90" />
           </button>
         )}

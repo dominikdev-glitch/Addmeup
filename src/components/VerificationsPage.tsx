@@ -26,8 +26,7 @@ import {
   Eye, 
   RefreshCw, 
   Filter,
-  Rocket,
-  Sparkles
+  Rocket
 } from 'lucide-react';
 
 interface VerificationsPageProps {
@@ -167,7 +166,7 @@ export const VerificationsPage: React.FC<VerificationsPageProps> = ({
       setProcessingClaimId(claim.claimId);
       const result = await approveClaim(claim.claimId, userUid);
       if (result.success) {
-        onToast(`Approved! +${result.creditsAwarded} Credits released to ${claim.claimerDisplayName}`);
+        onToast(`Approved! +${result.creditsAwarded} Points released to ${claim.claimerDisplayName}`);
       }
     } catch (err: any) {
       console.error("Approve error:", err);
@@ -179,7 +178,7 @@ export const VerificationsPage: React.FC<VerificationsPageProps> = ({
 
   const handleReject = async (claim: Claim) => {
     if (!userUid) return;
-    const confirmReject = window.confirm("Reject this claim? The claimer will not receive credits for this add.");
+    const confirmReject = window.confirm("Reject this claim? The claimer will not receive points for this add.");
     if (!confirmReject) return;
 
     try {
@@ -200,7 +199,7 @@ export const VerificationsPage: React.FC<VerificationsPageProps> = ({
       setProcessingClaimId(claim.claimId);
       const res = await autoApprovePendingClaim(claim.claimId, userUid);
       if (res.success) {
-        onToast(`+${res.creditsAwarded} Credits credited via 24h auto-approval!`);
+        onToast(`+${res.creditsAwarded} Points credited via 24h auto-approval!`);
       }
     } catch (err: any) {
       onToast(err.message || "Auto-approval not available yet.");
@@ -341,7 +340,7 @@ export const VerificationsPage: React.FC<VerificationsPageProps> = ({
             </div>
           ) : filteredIncoming.length === 0 ? (
             <div className="glass-card border border-slate-200/80 rounded-2xl p-6 text-center space-y-2">
-              <div className="text-2xl">✨</div>
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
               <p className="text-xs font-bold text-slate-800">
                 {filterStatus === 'pending' ? 'No pending claims to review!' : 'No claims found.'}
               </p>

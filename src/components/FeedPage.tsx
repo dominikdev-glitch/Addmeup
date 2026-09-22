@@ -18,7 +18,8 @@ import {
   Search, 
   PlusCircle, 
   RefreshCw, 
-  Rocket 
+  Rocket,
+  Flame 
 } from 'lucide-react';
 import { triggerHaptic } from '../lib/device';
 
@@ -69,10 +70,50 @@ export const FeedPage: React.FC<FeedPageProps> = ({
       const now = Date.now();
       const fetchedAds: Ad[] = [];
       snapshot.forEach((doc) => {
-        const data = doc.data() as Ad;
-        // Keep active or paused ads
-        if ((data.status === 'active' || data.status === 'paused') && data.expiresAt > now) {
-          fetchedAds.push(data);
+        try {
+          const raw = doc.data() as any;
+          if (!raw) return;
+
+          // Safely resolve expiresAt whether it is a number, Timestamp, or string
+          let exp = 0;
+          if (typeof raw.expiresAt === 'number') {
+            exp = raw.expiresAt;
+          } else if (raw.expiresAt && typeof raw.expiresAt.toMillis === 'function') {
+            exp = raw.expiresAt.toMillis();
+          } else if (typeof raw.expiresAt === 'string') {
+            exp = Number(raw.expiresAt) || 0;
+          }
+
+          // Keep active or paused ads
+          const status = raw.status || 'active';
+          if ((status === 'active' || status === 'paused') && exp > now) {
+            // Normalize imageUrl if it was stored as an object
+            let cleanImageUrl = raw.imageUrl;
+            if (typeof raw.imageUrl === 'object' && raw.imageUrl !== null) {
+              cleanImageUrl = raw.imageUrl.dataUrl || raw.imageUrl.url || undefined;
+            }
+
+            // Normalize avatarUrl if it was stored as an object
+            let cleanAvatarUrl = raw.avatarUrl;
+            if (typeof raw.avatarUrl === 'object' && raw.avatarUrl !== null) {
+              cleanAvatarUrl = raw.avatarUrl.dataUrl || raw.avatarUrl.url || undefined;
+            }
+
+            fetchedAds.push({
+              ...raw,
+              adId: raw.adId || doc.id,
+              status,
+              expiresAt: exp,
+              imageUrl: cleanImageUrl,
+              avatarUrl: cleanAvatarUrl,
+              title: typeof raw.title === 'string' ? raw.title : 'Social Ad',
+              targetHandleOrNumber: typeof raw.targetHandleOrNumber === 'string' ? raw.targetHandleOrNumber : '',
+              platform: raw.platform === 'whatsapp' ? 'whatsapp' : 'snapchat',
+              category: raw.category || 'Friends',
+            } as Ad);
+          }
+        } catch (err) {
+          console.warn("Error parsing ad document:", doc.id, err);
         }
       });
       setAds(fetchedAds);
@@ -288,7 +329,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
                 </span>
               )}
             </div>
-            <span className="text-orange-600 font-extrabold">+5 Credits per Add</span>
+            <span className="text-orange-600 font-extrabold">+5 Points per Add</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
@@ -350,7 +391,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           profile={profile}
           onClose={() => setSelectedAdForModal(null)}
           onSuccessClaim={(amount) => {
-            onToast(`Verification submitted! You'll receive +${amount} Credits upon approval. 🪙`);
+            onToast(`Verification submitted! You'll receive +${amount} Points upon approval. 🪙`);
           }}
           onRequireAuth={onRequireAuth}
         />
@@ -362,7 +403,8 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           isOpen={!!selectedAdForReport}
           onClose={() => setSelectedAdForReport(null)}
           ad={selectedAdForReport}
-          userUid={userUid}
+          reporterUid={userUid}
+          onToast={onToast}
           onReportSubmitted={() => {
             if (selectedAdForReport) {
               setHiddenAdIds((prev) => new Set([...prev, selectedAdForReport.adId]));

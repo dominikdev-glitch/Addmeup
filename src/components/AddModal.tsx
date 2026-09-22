@@ -325,7 +325,7 @@ export const AddModal: React.FC<AddModalProps> = ({
                 <span>Approval & Protection</span>
               </div>
               <p className="text-[10px] text-slate-300 leading-snug">
-                Once approved, <span className="font-bold text-white">+{ad.rewardPerAdd || 5} Credits</span> are credited to your wallet. If the creator takes longer than 24h, claims are auto-approved.
+                Once approved, <span className="font-bold text-white">+{ad.rewardPerAdd || 5} Points</span> are credited to your wallet. If the creator takes longer than 24h, claims are auto-approved.
               </p>
             </div>
 
@@ -402,9 +402,15 @@ export const AddModal: React.FC<AddModalProps> = ({
                     className="w-full bg-slate-900/80 border border-white/20 rounded-lg pl-6 pr-2.5 py-1.5 text-xs font-mono font-bold text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                   />
                 </div>
-                <p className="text-[9px] text-slate-400 leading-tight">
-                  The ad creator checks their "Added Me" list for this username before approving.
-                </p>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 space-y-1 text-slate-300 text-[10px]">
+                  <p className="font-semibold text-amber-300 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    <span>How it works:</span>
+                  </p>
+                  <p className="text-slate-300 leading-relaxed">
+                    When you tap <strong>"Open Snapchat Profile"</strong>, you'll be redirected directly to <strong>@{cleanTarget}</strong>. Once you add them, their app notifies them in <strong>"Added Me"</strong> with your username <strong>@{snapchatHandle ? snapchatHandle.replace('@', '') : 'your_handle'}</strong> to release your points.
+                  </p>
+                </div>
               </div>
             ) : (
               /* WHATSAPP: Auto-generated code */

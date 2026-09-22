@@ -9,7 +9,6 @@ import {
   Coins, 
   Clock, 
   Check, 
-  Sparkles, 
   ArrowUpRight, 
   AlertCircle,
   Flame
@@ -79,7 +78,7 @@ export const BoostModal: React.FC<BoostModalProps> = ({
   const handleBoost = async () => {
     if (!userUid) return;
     if (!hasEnoughCredits) {
-      setErrorMsg(`Insufficient credits. You need ${selectedPackage.costCredits} credits.`);
+      setErrorMsg(`Insufficient points. You need ${selectedPackage.costCredits} points.`);
       return;
     }
 
@@ -175,8 +174,8 @@ export const BoostModal: React.FC<BoostModalProps> = ({
               <label className="text-xs font-black uppercase tracking-wider text-slate-500">
                 Select Boost Duration
               </label>
-              <span className="text-[10px] text-amber-700 font-bold flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> Up to 10x More Adds
+              <span className="text-[10px] text-orange-600 font-bold flex items-center gap-1">
+                <Flame className="w-3 h-3 text-orange-500" /> Up to 10x More Adds
               </span>
             </div>
 
@@ -220,7 +219,7 @@ export const BoostModal: React.FC<BoostModalProps> = ({
                         <span className="font-black text-xs text-slate-900 font-mono">
                           {pkg.costCredits}
                         </span>
-                        <span className="text-[9px] text-slate-400 font-bold">Cr</span>
+                        <span className="text-[9px] text-slate-400 font-bold">Pts</span>
                       </div>
                       {isSelected && (
                         <div className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
@@ -242,7 +241,7 @@ export const BoostModal: React.FC<BoostModalProps> = ({
                 <span>Your Wallet Balance:</span>
               </span>
               <span className="font-mono font-black text-slate-900">
-                {userBalance.toLocaleString()} Credits
+                {userBalance.toLocaleString()} Points
               </span>
             </div>
 
@@ -251,14 +250,14 @@ export const BoostModal: React.FC<BoostModalProps> = ({
                 Cost for {selectedPackage.label}:
               </span>
               <span className="font-mono font-black text-rose-600">
-                -{selectedPackage.costCredits} Credits
+                -{selectedPackage.costCredits} Points
               </span>
             </div>
 
             <div className="flex items-center justify-between text-xs pt-1 border-t border-amber-200/60 font-bold">
               <span className="text-slate-700">Balance After Boost:</span>
               <span className={`font-mono font-black ${balanceAfter >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                {balanceAfter.toLocaleString()} Credits
+                {balanceAfter.toLocaleString()} Points
               </span>
             </div>
           </div>
@@ -269,7 +268,7 @@ export const BoostModal: React.FC<BoostModalProps> = ({
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />
                 <p className="text-xs font-semibold">
-                  {errorMsg || `You need ${(selectedPackage.costCredits - userBalance).toLocaleString()} more credits to activate this boost.`}
+                  {errorMsg || `You need ${(selectedPackage.costCredits - userBalance).toLocaleString()} more points to activate this boost.`}
                 </p>
               </div>
 
@@ -282,7 +281,7 @@ export const BoostModal: React.FC<BoostModalProps> = ({
                   }}
                   className="w-full py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1 shadow-2xs transition-colors"
                 >
-                  <span>Top Up Credits in Wallet</span>
+                  <span>Top Up Points in Wallet</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -292,7 +291,8 @@ export const BoostModal: React.FC<BoostModalProps> = ({
           {/* Benefit Explanation */}
           <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 space-y-1">
             <div className="font-bold text-slate-700 flex items-center gap-1">
-              <span>✨ What happens when you boost?</span>
+              <Rocket className="w-3.5 h-3.5 text-orange-500" />
+              <span>What happens when you boost?</span>
             </div>
             <p className="leading-relaxed">
               Your ad gets pinned to the <strong>#1 VIP slot at the very top of the feed</strong> above all regular ads, with an eye-catching golden glow and verified live badge.
@@ -329,7 +329,7 @@ export const BoostModal: React.FC<BoostModalProps> = ({
               <>
                 <Rocket className="w-3.5 h-3.5" />
                 <span>
-                  {isCurrentlyBoosted ? 'Extend Boost' : 'Boost Now'} (-{selectedPackage.costCredits} Cr)
+                  {isCurrentlyBoosted ? 'Extend Boost' : 'Boost Now'} (-{selectedPackage.costCredits} Pts)
                 </span>
               </>
             )}

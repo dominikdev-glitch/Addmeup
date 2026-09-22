@@ -76,8 +76,9 @@ export async function submitClaimVerification(params: {
   claimerDisplayName: string;
   verificationCode?: string; // For WhatsApp
   claimerSnapchatHandle?: string; // For Snapchat
+  proofImageUrl?: string; // Optional screenshot proof
 }): Promise<{ success: boolean; claimId: string; status: 'pending' | 'verified'; creditsAwarded: number }> {
-  const { ad, claimerUid, claimerDisplayName, verificationCode, claimerSnapchatHandle } = params;
+  const { ad, claimerUid, claimerDisplayName, verificationCode, claimerSnapchatHandle, proofImageUrl } = params;
 
   if (!ad.adId || !claimerUid) {
     throw new Error("Sign in to get started");
@@ -132,6 +133,7 @@ export async function submitClaimVerification(params: {
       claimerDisplayName: claimerDisplayName || 'Social Member',
       verificationCode: verificationCode || null,
       claimerSnapchatHandle: claimerSnapchatHandle || null,
+      proofImageUrl: proofImageUrl || null,
       status: 'pending',
       creditsAwarded: rewardAmount,
       createdAt: nowMs,
@@ -258,8 +260,8 @@ export async function approveClaim(
   if (res.success && res.claimerUid) {
     sendNotification({
       userId: res.claimerUid,
-      title: 'Claim Approved! +Credits Added',
-      message: `Your add on "${res.adTitle || 'Ad'}" was approved! +${res.creditsAwarded} Credits credited to your wallet 🪙`,
+      title: 'Claim Approved! +Points Added',
+      message: `Your add on "${res.adTitle || 'Ad'}" was approved! +${res.creditsAwarded} Points added to your wallet 🪙`,
       type: 'claim_verified',
       linkTab: 'wallet',
       meta: { claimId },
@@ -422,7 +424,7 @@ export async function autoApprovePendingClaim(
     sendNotification({
       userId: res.claimerUid,
       title: 'Claim Auto-Approved (24h Window)',
-      message: `Your claim on "${res.adTitle || 'Ad'}" was automatically approved! +${res.creditsAwarded} Credits added.`,
+      message: `Your claim on "${res.adTitle || 'Ad'}" was automatically approved! +${res.creditsAwarded} Points added.`,
       type: 'claim_verified',
       linkTab: 'wallet',
     }).catch(console.error);
@@ -493,6 +495,18 @@ export async function publishAd(params: {
       creditBalance: newBalance,
     }, { merge: true });
 
+    const cleanImageUrl = typeof imageUrl === 'string' && imageUrl.trim().length > 0
+      ? imageUrl.trim()
+      : (typeof imageUrl === 'object' && imageUrl !== null && (imageUrl as any).dataUrl
+        ? (imageUrl as any).dataUrl
+        : null);
+
+    const cleanAvatarUrl = typeof avatarUrl === 'string' && avatarUrl.trim().length > 0
+      ? avatarUrl.trim()
+      : (typeof avatarUrl === 'object' && avatarUrl !== null && (avatarUrl as any).dataUrl
+        ? (avatarUrl as any).dataUrl
+        : null);
+
     // 3. Create ad document
     transaction.set(newAdRef, {
       adId: newAdRef.id,
@@ -508,8 +522,8 @@ export async function publishAd(params: {
       expiresAt: expiresAtMs,
       createdAt: nowMs,
       userDisplayName: userDisplayName || 'Social Member',
-      avatarUrl: avatarUrl || null,
-      imageUrl: imageUrl || null,
+      avatarUrl: cleanAvatarUrl,
+      imageUrl: cleanImageUrl,
       description: description ? description.trim() : null,
       reportsCount: 0,
       viewsCount: 0,
@@ -1072,6 +1086,96 @@ export async function claimDailyBonus(userId: string): Promise<{
   }
 
   return res;
+}
+
+/**
+ * ADMIN: Toggle a user's isAdmin status in Firestore
+ */
+export async function adminToggleUserAdmin(targetUid: string, makeAdmin: boolean): Promise<void> {
+  const userRef = doc(db, 'users', targetUid);
+  await updateDoc(userRef, {
+    isAdmin: makeAdmin,
+  });
+}
+
+/**
+ * ADMIN: Toggle a user's isBanned status in Firestore
+ */
+export async function adminToggleUserBan(targetUid: string, ban: boolean): Promise<void> {
+  const userRef = doc(db, 'users', targetUid);
+  await updateDoc(userRef, {
+    isBanned: ban,
+  });
+}
+
+/**
+ * ADMIN: Manually adjust a user's credit balance with an audit log
+ */
+export async function adminAdjustUserCredits(
+  targetUid: string,
+  amountChange: number,
+  adminReason: string
+): Promise<{ newBalance: number }> {
+  const userRef = doc(db, 'users', targetUid);
+
+  return await runTransaction(db, async (tx) => {
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists()) {
+      throw new Error("Target user not found");
+    }
+
+    const currentBalance = Number(userSnap.data().creditBalance || 0);
+    const newBalance = Math.max(0, currentBalance + amountChange);
+
+    tx.update(userRef, {
+      creditBalance: newBalance,
+    });
+
+    const transRef = doc(collection(db, 'transactions'));
+    tx.set(transRef, {
+      transactionId: transRef.id,
+      userId: targetUid,
+      amount: amountChange,
+      type: 'admin_adjustment',
+      referenceId: 'admin_manual_grant',
+      description: `Admin adjustment (${amountChange >= 0 ? '+' : ''}${amountChange} Cr): ${adminReason || 'Platform adjustment'}`,
+      createdAt: serverTimestamp(),
+    });
+
+    return { newBalance };
+  });
+}
+
+/**
+ * ADMIN: Delete or expire an ad violating guidelines
+ */
+export async function adminDeleteAd(adId: string, adminReason?: string): Promise<void> {
+  const adRef = doc(db, 'ads', adId);
+  await updateDoc(adRef, {
+    status: 'expired',
+    adminModerated: true,
+    adminModerationReason: adminReason || 'Removed by administrator',
+  });
+}
+
+/**
+ * ADMIN: Resolve or dismiss an ad report
+ */
+export async function adminResolveReport(
+  reportId: string,
+  status: 'dismissed' | 'reviewed',
+  deleteTargetAd?: boolean,
+  adId?: string
+): Promise<void> {
+  const reportRef = doc(db, 'reports', reportId);
+  await updateDoc(reportRef, {
+    status,
+    resolvedAt: Date.now(),
+  });
+
+  if (deleteTargetAd && adId) {
+    await adminDeleteAd(adId, "Moderated following user reports");
+  }
 }
 
 

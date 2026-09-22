@@ -66,39 +66,59 @@ export function useAuth() {
         const myReferralCode = `UP-${currentUser.uid.slice(0, 6).toUpperCase()}`;
 
         // Immediate fallback profile so UI remains interactive
+        const isDefaultAdmin = currentUser.email === 'heisgag1@gmail.com';
         setProfile({
           uid: currentUser.uid,
           username: currentUser.displayName || `User_${currentUser.uid.slice(0, 5)}`,
           email: currentUser.email || undefined,
           photoUrl: currentUser.photoURL || undefined,
           creditBalance: 20,
+          isAdmin: isDefaultAdmin,
+          isBanned: false,
           snapchatHandle: '',
           whatsappNumber: '',
           referralCode: myReferralCode,
           referralsCount: 0,
           referralCreditsEarned: 0,
+          approvedClaimsCount: 0,
+          totalClaimsCount: 0,
+          dailyStreak: 0,
           createdAt: Date.now(),
         });
         setLoading(false);
 
-        // Subscribe to live profile changes (credit balance, handles, referrals)
+        // Subscribe to live profile changes (credit balance, handles, referrals, admin status)
         unsubProfile = onSnapshot(
           userRef,
           async (snapshot) => {
             if (snapshot.exists()) {
               const data = snapshot.data();
+              const isAdmin = Boolean(data.isAdmin || isDefaultAdmin);
+              const isBanned = Boolean(data.isBanned);
+
+              // If owner email signs in and is not marked isAdmin yet, save it to firestore
+              if (isDefaultAdmin && !data.isAdmin) {
+                setDoc(userRef, { isAdmin: true }, { merge: true }).catch(console.error);
+              }
+
               setProfile({
                 uid: currentUser.uid,
                 username: data.username || currentUser.displayName || 'Friend',
                 email: currentUser.email || data.email || undefined,
                 photoUrl: data.photoUrl || currentUser.photoURL || undefined,
                 creditBalance: Number(data.creditBalance ?? 20),
+                isAdmin,
+                isBanned,
                 snapchatHandle: data.snapchatHandle || '',
                 whatsappNumber: data.whatsappNumber || '',
                 referralCode: data.referralCode || myReferralCode,
                 referredBy: data.referredBy || undefined,
                 referralsCount: Number(data.referralsCount || 0),
                 referralCreditsEarned: Number(data.referralCreditsEarned || 0),
+                approvedClaimsCount: Number(data.approvedClaimsCount || 0),
+                totalClaimsCount: Number(data.totalClaimsCount || 0),
+                dailyStreak: Number(data.dailyStreak || 0),
+                lastDailyBonusDate: data.lastDailyBonusDate || '',
                 createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
               });
             } else {
@@ -112,6 +132,8 @@ export function useAuth() {
                   username: currentUser.displayName || `User_${currentUser.uid.slice(0, 5)}`,
                   email: currentUser.email || '',
                   creditBalance: 20, // Initial welcome bonus
+                  isAdmin: isDefaultAdmin,
+                  isBanned: false,
                   referralCode: myReferralCode,
                   referralsCount: 0,
                   referralCreditsEarned: 0,

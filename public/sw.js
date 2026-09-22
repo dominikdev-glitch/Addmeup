@@ -1,8 +1,16 @@
-const CACHE_NAME = 'addup-pwa-v1';
+const CACHE_NAME = 'addup-pwa-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/pwa-maskable-512x512.png',
+  '/favicon.png',
+  '/favicon.ico'
 ];
 
 self.addEventListener('install', (event) => {

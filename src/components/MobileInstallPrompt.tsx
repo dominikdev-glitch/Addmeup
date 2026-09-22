@@ -78,9 +78,11 @@ export const MobileInstallPrompt: React.FC = () => {
     >
       <div className="glass-card-dark border border-white/20 p-3 rounded-2xl shadow-2xl text-white flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center text-white shrink-0 shadow-md">
-            <Smartphone className="w-5 h-5" />
-          </div>
+          <img 
+            src="/icon-192.png" 
+            alt="AddMeUp Logo" 
+            className="w-10 h-10 rounded-xl object-cover shadow-md border border-white/20 shrink-0" 
+          />
           <div className="min-w-0">
             <p className="text-xs font-black truncate text-white">Add AddMeUp to Home Screen</p>
             {isIOS ? (

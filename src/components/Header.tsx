@@ -9,7 +9,8 @@ import {
   ShieldCheck, 
   Bell, 
   Flame, 
-  LayoutDashboard 
+  LayoutDashboard,
+  ShieldAlert
 } from 'lucide-react';
 import { getEffectiveAvatar } from '../lib/avatar';
 import { triggerHaptic } from '../lib/device';
@@ -25,6 +26,7 @@ interface HeaderProps {
   onSignIn: () => void;
   onOpenMyAds?: () => void;
   onOpenDailyBonus?: () => void;
+  onOpenAdmin?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,6 +40,7 @@ export const Header: React.FC<HeaderProps> = ({
   onSignIn,
   onOpenMyAds,
   onOpenDailyBonus,
+  onOpenAdmin,
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
   const isDailyBonusReady = profile && profile.lastDailyBonusDate !== todayStr;
@@ -119,6 +122,16 @@ export const Header: React.FC<HeaderProps> = ({
             <Wallet className="w-3.5 h-3.5" />
             <span>Wallet</span>
           </button>
+
+          {profile?.isAdmin && onOpenAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-black bg-gradient-to-r from-rose-600 to-amber-600 text-white shadow-xs hover:brightness-110 transition-all flex items-center gap-1.5 active:scale-95"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Admin Panel</span>
+            </button>
+          )}
         </div>
 
         {/* Balance & User Actions */}
@@ -141,14 +154,14 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
-              {/* Wallet Credits Pill */}
+              {/* Wallet Points Pill */}
               <button
                 onClick={() => setActiveTab('wallet')}
                 className="flex items-center gap-1 bg-amber-100/90 hover:bg-amber-200/80 border border-amber-300/70 px-2.5 py-1 rounded-full text-[11px] font-bold text-amber-950 transition-all active:scale-95 shadow-2xs"
               >
                 <span>🪙</span>
                 <span className="font-black text-slate-900 font-mono">{profile.creditBalance.toLocaleString()}</span>
-                <span className="text-[9px] text-amber-800 font-bold uppercase hidden sm:inline">Cr</span>
+                <span className="text-[9px] text-amber-800 font-bold uppercase hidden sm:inline">Pts</span>
               </button>
 
               {/* Notification Bell */}

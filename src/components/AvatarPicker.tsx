@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import { 
   Camera, 
   Upload, 
-  Sparkles, 
   Check, 
   Trash2, 
   AlertCircle, 
@@ -123,7 +122,7 @@ export const AvatarPicker: React.FC<AvatarPickerProps> = ({
           </p>
           {compressionInfo && (
             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full mt-1">
-              <span>✨</span> {compressionInfo}
+              <Check className="w-3 h-3 text-emerald-600" /> {compressionInfo}
             </span>
           )}
           {errorMessage && (
@@ -159,7 +158,7 @@ export const AvatarPicker: React.FC<AvatarPickerProps> = ({
               : 'text-slate-600 hover:text-slate-900'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+          <ImageIcon className="w-3.5 h-3.5 text-amber-500" />
           <span>3D Avatars (16)</span>
           {isPresetSelected && <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>}
         </button>
