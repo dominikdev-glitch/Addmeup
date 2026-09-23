@@ -18,10 +18,45 @@ declare global {
   }
 }
 
-// Default to user configured environment key, or the configured Paystack test public key
+// Fallback test key if neither .env nor server config is available
+const DEFAULT_TEST_KEY = 'pk_test_b4162ac7f718b0af776e78ae8665324284865b74';
+
+// Cached dynamic public key
+let cachedPublicKey: string | null = null;
+
+/**
+ * Fetch the active Paystack public key from server environment or Vite client env
+ */
+export async function getPaystackPublicKey(): Promise<string> {
+  if (cachedPublicKey) return cachedPublicKey;
+
+  // 1. Try runtime server config endpoint (useful on Render without rebuilding Vite)
+  try {
+    const res = await fetch('/api/paystack/config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.publicKey && typeof data.publicKey === 'string' && data.publicKey.trim()) {
+        cachedPublicKey = data.publicKey.trim();
+        return cachedPublicKey;
+      }
+    }
+  } catch {
+    // In pure client or offline dev, ignore fetch error
+  }
+
+  // 2. Vite build-time environment variable
+  const viteKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+  if (viteKey && typeof viteKey === 'string' && viteKey.trim()) {
+    cachedPublicKey = viteKey.trim();
+    return cachedPublicKey;
+  }
+
+  return DEFAULT_TEST_KEY;
+}
+
 export const PAYSTACK_PUBLIC_KEY = 
   (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string) || 
-  'pk_test_b4162ac7f718b0af776e78ae8665324284865b74';
+  DEFAULT_TEST_KEY;
 
 /**
  * Load Paystack Inline script dynamically if not present
@@ -66,18 +101,21 @@ export interface PaystackCheckoutOptions {
  */
 export async function triggerPaystackPayment(options: PaystackCheckoutOptions): Promise<boolean> {
   const isLoaded = await loadPaystackScript();
+  const activeKey = await getPaystackPublicKey();
 
   const ref = options.reference || `ADUP-PSTK-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   if (window.PaystackPop && window.PaystackPop.setup) {
     try {
       const handler = window.PaystackPop.setup({
-        key: PAYSTACK_PUBLIC_KEY,
+        key: activeKey,
         email: options.email,
-        amount: Math.round(options.amountNgn * 100), // Paystack accepts amount in Kobo
+        amount: Math.round(options.amountNgn * 100), // in Kobo
         currency: 'NGN',
         ref: ref,
         metadata: {
+          user_uid: options.userId,
+          credits_count: options.credits,
           custom_fields: [
             {
               display_name: 'App',
@@ -85,7 +123,7 @@ export async function triggerPaystackPayment(options: PaystackCheckoutOptions): 
               value: 'AddMeUp Growth',
             },
             {
-              display_name: 'Credits To Add',
+              display_name: 'Points To Add',
               variable_name: 'credits_count',
               value: options.credits,
             },
@@ -117,5 +155,54 @@ export async function triggerPaystackPayment(options: PaystackCheckoutOptions): 
   } else {
     console.warn('Paystack popup object not available');
     return false;
+  }
+}
+
+/**
+ * Verify transaction reference on server using PAYSTACK_SECRET_KEY
+ * and atomically credit user via Firebase Admin SDK
+ */
+export async function verifyPaystackOnServer(params: {
+  reference: string;
+  userId: string;
+  credits: number;
+  amountNgn: number;
+}): Promise<{
+  success: boolean;
+  verified: boolean;
+  credited?: boolean;
+  alreadyProcessed?: boolean;
+  needsClientCredit?: boolean;
+  message?: string;
+}> {
+  try {
+    const response = await fetch('/api/paystack/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data;
+    }
+
+    const errData = await response.json().catch(() => ({}));
+    return {
+      success: false,
+      verified: false,
+      message: errData.message || `Verification failed with HTTP ${response.status}`,
+    };
+  } catch (err: any) {
+    // If endpoint doesn't exist (e.g. running in client-only preview)
+    console.warn('[Paystack Client] Server verification endpoint unreachable, fallback to client confirmation:', err.message);
+    return {
+      success: true,
+      verified: false,
+      needsClientCredit: true,
+      message: 'Server unreachable, using client credit fallback.',
+    };
   }
 }

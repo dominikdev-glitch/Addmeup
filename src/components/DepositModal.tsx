@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { DepositPackage } from '../types';
 import { DEPOSIT_PACKAGES, processCreditDeposit } from '../lib/transactions';
-import { triggerPaystackPayment } from '../lib/paystack';
+import { triggerPaystackPayment, verifyPaystackOnServer } from '../lib/paystack';
 import { 
   X, 
   Coins, 
@@ -37,7 +37,6 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   const [isCustom, setIsCustom] = useState(false);
   const [customCredits, setCustomCredits] = useState<number>(100);
   const [email, setEmail] = useState<string>(initialUserEmail || '');
-  const [gateway, setGateway] = useState<'paystack' | 'flutterwave'>('paystack');
   
   // Checkout flow state
   const [step, setStep] = useState<'select' | 'checkout' | 'success'>('select');
@@ -50,14 +49,14 @@ export const DepositModal: React.FC<DepositModalProps> = ({
 
   const totalCredits = isCustom ? customCredits : (selectedPkg.credits + (selectedPkg.bonusCredits || 0));
   const totalNgn = isCustom ? customCredits * 10 : selectedPkg.priceNgn;
-  const transactionRef = `ADUP-${gateway === 'paystack' ? 'PSTK' : 'FLW'}-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const transactionRef = `ADUP-PSTK-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   const handleStartCheckout = () => {
     setErrorMessage(null);
     setStep('checkout');
   };
 
-  const handlePayWithGateway = async () => {
+  const handlePayWithPaystack = async () => {
     if (!userUid) {
       onToast("Please sign in to deposit points.");
       return;
@@ -69,67 +68,80 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       return;
     }
 
-    if (gateway === 'paystack') {
-      try {
-        setIsProcessing(true);
-        setErrorMessage(null);
+    try {
+      setIsProcessing(true);
+      setErrorMessage(null);
 
-        const launched = await triggerPaystackPayment({
-          email: payEmail,
-          amountNgn: totalNgn,
-          credits: totalCredits,
-          userId: userUid,
-          reference: transactionRef,
-          onSuccess: async (paystackRef) => {
-            try {
-              const res = await processCreditDeposit({
+      const launched = await triggerPaystackPayment({
+        email: payEmail,
+        amountNgn: totalNgn,
+        credits: totalCredits,
+        userId: userUid,
+        reference: transactionRef,
+        onSuccess: async (paystackRef) => {
+          try {
+            setIsProcessing(true);
+            setErrorMessage(null);
+
+            // 1. Verify payment on server with PAYSTACK_SECRET_KEY & credit via Firebase Admin SDK
+            const verifyRes = await verifyPaystackOnServer({
+              reference: paystackRef,
+              userId: userUid,
+              credits: totalCredits,
+              amountNgn: totalNgn,
+            });
+
+            if (!verifyRes.success) {
+              setErrorMessage(verifyRes.message || "Payment verification failed.");
+              setIsProcessing(false);
+              return;
+            }
+
+            // 2. If server verified but needs client-side credit (e.g. Firebase Admin not in server env)
+            if (verifyRes.needsClientCredit) {
+              await processCreditDeposit({
                 userId: userUid,
                 credits: totalCredits,
                 amountNgn: totalNgn,
                 paymentMethod: 'Paystack (Card/Transfer/OPay)',
                 referenceId: paystackRef,
               });
-
-              if (res.success) {
-                setLastRef(paystackRef);
-                setLastGateway('Paystack Nigeria');
-                setStep('success');
-                onToast(`Payment Confirmed via Paystack! +${totalCredits} Points added! 🪙`);
-              }
-            } catch (depositErr: any) {
-              console.error("Deposit processing error:", depositErr);
-              setErrorMessage(depositErr.message || "Payment received, but crediting failed. Contact support.");
-            } finally {
-              setIsProcessing(false);
             }
-          },
-          onClose: () => {
-            setIsProcessing(false);
-            onToast("Payment window closed.");
-          },
-          onError: (err) => {
-            setIsProcessing(false);
-            console.error("Paystack launch error:", err);
-            setErrorMessage("Could not open payment window. You can use the instant sandbox test below.");
-          }
-        });
 
-        if (!launched) {
+            setLastRef(paystackRef);
+            setLastGateway('Paystack');
+            setStep('success');
+            onToast(`Payment Confirmed via Paystack! +${totalCredits} Points added! 🪙`);
+          } catch (depositErr: any) {
+            console.error("Deposit processing error:", depositErr);
+            setErrorMessage(depositErr.message || "Payment received, but crediting failed. Contact support.");
+          } finally {
+            setIsProcessing(false);
+          }
+        },
+        onClose: () => {
           setIsProcessing(false);
+          onToast("Payment window closed.");
+        },
+        onError: (err) => {
+          setIsProcessing(false);
+          console.error("Paystack launch error:", err);
+          setErrorMessage("Could not open Paystack window. You can use the instant sandbox test below.");
         }
-      } catch (err: any) {
-        console.error("Paystack init error:", err);
+      });
+
+      if (!launched) {
         setIsProcessing(false);
-        setErrorMessage(err.message || "Failed to initialize Paystack.");
       }
-    } else {
-      // Flutterwave Flow
-      handleSimulatedGatewaySuccess('Flutterwave Nigeria');
+    } catch (err: any) {
+      console.error("Paystack init error:", err);
+      setIsProcessing(false);
+      setErrorMessage(err.message || "Failed to initialize Paystack.");
     }
   };
 
-  // Instant Verification Helper for sandbox / preview / direct transfer verification
-  const handleSimulatedGatewaySuccess = async (gatewayName: string = gateway === 'paystack' ? 'Paystack Sandbox' : 'Flutterwave Sandbox') => {
+  // Instant Verification Helper for sandbox / preview testing
+  const handleSimulatedGatewaySuccess = async () => {
     if (!userUid) {
       onToast("Please sign in to deposit points.");
       return;
@@ -140,20 +152,20 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       setErrorMessage(null);
       
       // Simulate network verification
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
-      const mockRef = `${gateway === 'paystack' ? 'PSTK' : 'FLW'}-REF-${Date.now().toString().slice(-6)}`;
+      const mockRef = `ADUP-PSTK-TEST-${Date.now().toString().slice(-6)}`;
       const res = await processCreditDeposit({
         userId: userUid,
         credits: totalCredits,
         amountNgn: totalNgn,
-        paymentMethod: gatewayName,
+        paymentMethod: 'Paystack Sandbox',
         referenceId: mockRef,
       });
 
       if (res.success) {
         setLastRef(mockRef);
-        setLastGateway(gatewayName);
+        setLastGateway('Paystack Sandbox');
         setStep('success');
         onToast(`Payment Verified! +${totalCredits} Points added to wallet! 🪙`);
       }
@@ -286,38 +298,20 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               )}
             </div>
 
-            {/* Gateway Selector */}
-            <div className="space-y-1.5 pt-1">
-              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                Payment Channel
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setGateway('paystack')}
-                  className={`p-2 rounded-xl border text-left text-xs font-bold transition-all ${
-                    gateway === 'paystack'
-                      ? 'border-[#0ba4db] bg-[#0ba4db]/10 text-[#0993c5]'
-                      : 'border-slate-200 bg-white/70 text-slate-600'
-                  }`}
-                >
-                  <div className="text-[11px] font-black">Paystack</div>
-                  <div className="text-[9px] font-normal text-slate-400">Cards, Transfer, OPay</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setGateway('flutterwave')}
-                  className={`p-2 rounded-xl border text-left text-xs font-bold transition-all ${
-                    gateway === 'flutterwave'
-                      ? 'border-[#f5a623] bg-[#f5a623]/10 text-[#d48806]'
-                      : 'border-slate-200 bg-white/70 text-slate-600'
-                  }`}
-                >
-                  <div className="text-[11px] font-black">Flutterwave</div>
-                  <div className="text-[9px] font-normal text-slate-400">USSD, Mobile, Bank</div>
-                </button>
+            {/* Gateway Information Badge */}
+            <div className="p-2.5 rounded-xl border border-[#0ba4db]/30 bg-[#0ba4db]/5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-[#0ba4db] flex items-center justify-center text-white font-black text-xs">
+                  P
+                </div>
+                <div>
+                  <div className="text-[11px] font-black text-slate-900">Paystack Checkout</div>
+                  <div className="text-[9px] text-slate-500 font-medium">Debit Cards, Bank Transfer, USSD & OPay</div>
+                </div>
               </div>
+              <span className="text-[9px] font-bold text-[#0ba4db] bg-white border border-[#0ba4db]/20 px-2 py-0.5 rounded-full">
+                Active
+              </span>
             </div>
 
             {/* Summary & Proceed Button */}
@@ -335,13 +329,13 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                 onClick={handleStartCheckout}
                 className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-sm shadow-orange-500/25 flex items-center justify-center gap-1.5 transition-all active:scale-95"
               >
-                <span>Proceed to Checkout</span>
+                <span>Proceed to Paystack Checkout</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
 
               <div className="flex items-center justify-center gap-1 text-[9px] text-slate-400 font-medium">
                 <Lock className="w-2.5 h-2.5 text-emerald-600" />
-                <span>Secured 256-bit payment via Nigerian Gateways</span>
+                <span>Secured 256-bit encrypted checkout via Paystack</span>
               </div>
             </div>
           </div>
@@ -353,7 +347,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-base font-black text-slate-900">
-                  {gateway === 'paystack' ? 'Paystack' : 'Flutterwave'} Checkout
+                  Paystack Checkout
                 </h2>
                 <p className="text-xs text-slate-500 font-medium">
                   Depositing ₦{totalNgn.toLocaleString('en-NG')} NGN ({totalCredits} Points)
@@ -417,23 +411,19 @@ export const DepositModal: React.FC<DepositModalProps> = ({
             <div className="space-y-2.5 pt-1">
               <button
                 type="button"
-                onClick={handlePayWithGateway}
+                onClick={handlePayWithPaystack}
                 disabled={isProcessing}
-                className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-300 ${
-                  gateway === 'paystack'
-                    ? 'bg-[#0ba4db] hover:bg-[#0993c5] shadow-[#0ba4db]/25'
-                    : 'bg-[#f5a623] hover:bg-[#d48806] shadow-[#f5a623]/25'
-                }`}
+                className="w-full py-4 rounded-2xl font-black text-xs uppercase tracking-wider shadow-md text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:bg-slate-300 bg-[#0ba4db] hover:bg-[#0993c5] shadow-[#0ba4db]/25"
               >
                 {isProcessing ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Processing with {gateway === 'paystack' ? 'Paystack' : 'Flutterwave'}...</span>
+                    <span>Processing with Paystack...</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-4 h-4 fill-current" />
-                    <span>Pay ₦{totalNgn.toLocaleString('en-NG')} with {gateway === 'paystack' ? 'Paystack' : 'Flutterwave'}</span>
+                    <span>Pay ₦{totalNgn.toLocaleString('en-NG')} with Paystack</span>
                   </>
                 )}
               </button>
@@ -454,7 +444,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
 
             <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-medium">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>PCI-DSS Certified Nigerian Payment Gateway</span>
+              <span>PCI-DSS Certified Paystack Payment Gateway</span>
             </div>
           </div>
         )}

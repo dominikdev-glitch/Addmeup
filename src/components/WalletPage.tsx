@@ -257,7 +257,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                 </h3>
               </div>
               <span className="text-[9px] font-bold text-[#0ba4db] bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200">
-                via Paystack / Flutterwave
+                via Paystack
               </span>
             </div>
 

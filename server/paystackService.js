@@ -1,0 +1,155 @@
+import crypto from 'crypto';
+import { getFirebaseAdmin } from './firebaseAdmin.js';
+
+export const DEFAULT_PAYSTACK_SECRET_KEY = 'sk_test_900e2a1ab4aa94e1d1c5457b0d2848f28d2d50cf';
+export const DEFAULT_PAYSTACK_PUBLIC_KEY = 'pk_test_b4162ac7f718b0af776e78ae8665324284865b74';
+
+export const PAYSTACK_SECRET_KEY = 
+  process.env.PAYSTACK_SECRET_KEY || 
+  DEFAULT_PAYSTACK_SECRET_KEY;
+
+export const PAYSTACK_PUBLIC_KEY = 
+  process.env.PAYSTACK_PUBLIC_KEY || 
+  process.env.VITE_PAYSTACK_PUBLIC_KEY || 
+  DEFAULT_PAYSTACK_PUBLIC_KEY;
+
+/**
+ * Verify Paystack transaction by reference with Paystack API
+ */
+export async function verifyPaystackTransaction(reference) {
+  const secretKey = (process.env.PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY || '').trim();
+  if (!secretKey) {
+    throw new Error('PAYSTACK_SECRET_KEY is not configured on the server.');
+  }
+
+  const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${secretKey}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok || !data.status) {
+    throw new Error(data.message || 'Paystack verification request failed.');
+  }
+
+  return data.data;
+}
+
+/**
+ * Verify HMAC SHA512 signature from Paystack Webhook
+ */
+export function verifyPaystackSignature(rawBody, signature) {
+  const secretKey = (process.env.PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY || '').trim();
+  if (!secretKey || !signature) return false;
+
+  try {
+    const hash = crypto
+      .createHmac('sha512', secretKey)
+      .update(rawBody)
+      .digest('hex');
+    return hash === signature;
+  } catch (err) {
+    console.error('[Paystack Webhook] Signature verification error:', err);
+    return false;
+  }
+}
+
+/**
+ * Atomically credit user points and log deposit transaction in Firestore
+ * using Firebase Admin SDK.
+ */
+export async function creditUserDeposit({
+  userId,
+  credits,
+  amountNgn,
+  reference,
+  paymentMethod = 'Paystack',
+  paystackData = null,
+}) {
+  const { admin, db, isConfigured } = getFirebaseAdmin();
+
+  if (!isConfigured || !db) {
+    return {
+      success: true,
+      credited: false,
+      needsClientCredit: true,
+      message: 'Firebase Admin not configured on server; fallback to client credit.',
+    };
+  }
+
+  // 1. Idempotency Check: check if transaction with this referenceId was already processed
+  const transSnapshot = await db
+    .collection('transactions')
+    .where('referenceId', '==', reference)
+    .limit(1)
+    .get();
+
+  if (!transSnapshot.empty) {
+    console.log(`[Paystack] Reference ${reference} was already credited previously.`);
+    return {
+      success: true,
+      credited: true,
+      alreadyProcessed: true,
+      message: 'Transaction has already been credited.',
+    };
+  }
+
+  const batch = db.batch();
+
+  // 2. Update user points balance atomically
+  const userRef = db.collection('users').doc(userId);
+  batch.set(
+    userRef,
+    {
+      creditBalance: admin.firestore.FieldValue.increment(credits),
+      lastDepositAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  // 3. Log to transactions collection
+  const newTransRef = db.collection('transactions').doc();
+  batch.set(newTransRef, {
+    transactionId: newTransRef.id,
+    userId,
+    amount: credits,
+    amountNgn,
+    paymentMethod,
+    type: 'deposit',
+    referenceId: reference,
+    paystackId: paystackData?.id || null,
+    channel: paystackData?.channel || 'card',
+    currency: paystackData?.currency || 'NGN',
+    description: `Deposited ₦${Number(amountNgn).toLocaleString('en-NG')} (+${credits} Points via ${paymentMethod})`,
+    verifiedAt: new Date().toISOString(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  // 4. Create user notification
+  const newNotifRef = db.collection('notifications').doc();
+  batch.set(newNotifRef, {
+    notificationId: newNotifRef.id,
+    userId,
+    title: 'Deposit Confirmed! 🪙',
+    message: `₦${Number(amountNgn).toLocaleString('en-NG')} payment verified via Paystack. +${credits} Points credited to your account!`,
+    type: 'deposit_success',
+    read: false,
+    linkTab: 'wallet',
+    createdAt: Date.now(),
+    meta: { referenceId: reference, credits, amountNgn },
+  });
+
+  await batch.commit();
+
+  console.log(`[Paystack] Successfully credited user ${userId} with +${credits} points for ref ${reference}`);
+  return {
+    success: true,
+    credited: true,
+    alreadyProcessed: false,
+    message: `Successfully credited +${credits} Points!`,
+  };
+}
