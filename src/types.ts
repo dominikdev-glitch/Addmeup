@@ -76,6 +76,14 @@ export interface Ad {
   boostTier?: string;
   viewsCount?: number;
   clicksCount?: number;
+  likesCount?: number;
+}
+
+export interface AdLike {
+  likeId: string;
+  adId: string;
+  userId: string;
+  createdAt: number;
 }
 
 export type ClaimStatus = 'pending' | 'verified' | 'rejected';

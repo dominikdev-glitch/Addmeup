@@ -528,6 +528,7 @@ export async function publishAd(params: {
       reportsCount: 0,
       viewsCount: 0,
       clicksCount: 0,
+      likesCount: 0,
     });
 
     // 4. Record transaction log
@@ -1176,6 +1177,79 @@ export async function adminResolveReport(
   if (deleteTargetAd && adId) {
     await adminDeleteAd(adId, "Moderated following user reports");
   }
+}
+
+/**
+ * ADMIN: Toggle ad pause / active state
+ */
+export async function adminToggleAdPause(adId: string, currentStatus: string): Promise<'active' | 'paused'> {
+  const adRef = doc(db, 'ads', adId);
+  const newStatus = currentStatus === 'paused' ? 'active' : 'paused';
+  await updateDoc(adRef, {
+    status: newStatus,
+  });
+  return newStatus;
+}
+
+/**
+ * ADMIN: Give an ad a 24-hour VIP boost
+ */
+export async function adminBoostAd(adId: string, durationHours = 24): Promise<number> {
+  const adRef = doc(db, 'ads', adId);
+  const boostedUntil = Date.now() + durationHours * 60 * 60 * 1000;
+  await updateDoc(adRef, {
+    boostedUntil,
+    boostTier: 'admin_boost',
+  });
+  return boostedUntil;
+}
+
+/**
+ * ADMIN: Permanently delete an ad from the database
+ */
+export async function adminPermanentDeleteAd(adId: string): Promise<void> {
+  const adRef = doc(db, 'ads', adId);
+  await deleteDoc(adRef);
+}
+
+/**
+ * ADMIN: Force-approve any pending claim across the system
+ */
+export async function adminForceApproveClaim(claimId: string): Promise<void> {
+  const claimRef = doc(db, 'claims', claimId);
+  await runTransaction(db, async (tx) => {
+    const claimSnap = await tx.get(claimRef);
+    if (!claimSnap.exists()) throw new Error("Claim record not found");
+    const claimData = claimSnap.data();
+    if (claimData.status === 'verified') return;
+
+    const claimerRef = doc(db, 'users', claimData.claimerUid);
+    const claimerSnap = await tx.get(claimerRef);
+    const currentBalance = claimerSnap.exists() ? Number(claimerSnap.data().creditBalance || 0) : 0;
+    const reward = Number(claimData.creditsAwarded || 5);
+
+    tx.set(claimerRef, {
+      creditBalance: currentBalance + reward,
+      approvedClaimsCount: increment(1),
+    }, { merge: true });
+
+    tx.update(claimRef, {
+      status: 'verified',
+      verifiedAt: Date.now(),
+      adminApproved: true,
+    });
+
+    const transRef = doc(collection(db, 'transactions'));
+    tx.set(transRef, {
+      transactionId: transRef.id,
+      userId: claimData.claimerUid,
+      amount: reward,
+      type: 'reward_add',
+      referenceId: claimData.adId || 'admin_verified',
+      description: `Admin verified add reward on ${claimData.platform || 'Social'}`,
+      createdAt: serverTimestamp(),
+    });
+  });
 }
 
 

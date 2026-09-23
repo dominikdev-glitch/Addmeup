@@ -17,8 +17,8 @@ import { triggerHaptic } from '../lib/device';
 
 interface HeaderProps {
   profile: UserProfile | null;
-  activeTab: 'feed' | 'post' | 'verifications' | 'wallet' | 'transactions';
-  setActiveTab: (tab: 'feed' | 'post' | 'verifications' | 'wallet' | 'transactions') => void;
+  activeTab: 'feed' | 'post' | 'verifications' | 'wallet' | 'transactions' | 'admin';
+  setActiveTab: (tab: 'feed' | 'post' | 'verifications' | 'wallet' | 'transactions' | 'admin') => void;
   pendingCount?: number;
   unreadNotifCount?: number;
   onOpenNotifications?: () => void;
@@ -42,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDailyBonus,
   onOpenAdmin,
 }) => {
+  const isUserAdmin = Boolean(profile?.isAdmin || profile?.email === 'heisgag1@gmail.com');
   const todayStr = new Date().toISOString().split('T')[0];
   const isDailyBonusReady = profile && profile.lastDailyBonusDate !== todayStr;
   const currentStreak = Number(profile?.dailyStreak || 0);
@@ -123,13 +124,21 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Wallet</span>
           </button>
 
-          {profile?.isAdmin && onOpenAdmin && (
+          {isUserAdmin && (
             <button
-              onClick={onOpenAdmin}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-black bg-gradient-to-r from-rose-600 to-amber-600 text-white shadow-xs hover:brightness-110 transition-all flex items-center gap-1.5 active:scale-95"
+              onClick={() => {
+                triggerHaptic('light');
+                if (onOpenAdmin) onOpenAdmin();
+                setActiveTab('admin');
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 active:scale-95 ${
+                activeTab === 'admin'
+                  ? 'bg-gradient-to-r from-rose-600 via-orange-600 to-amber-600 text-white shadow-md'
+                  : 'text-rose-600 hover:text-rose-700 bg-rose-50/80 hover:bg-rose-100/80 border border-rose-200'
+              }`}
             >
               <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Admin Panel</span>
+              <span>Admin Console</span>
             </button>
           )}
         </div>
@@ -268,6 +277,24 @@ export const Header: React.FC<HeaderProps> = ({
           <Wallet className="w-3.5 h-3.5" />
           <span>Wallet</span>
         </button>
+
+        {isUserAdmin && (
+          <button
+            onClick={() => {
+              triggerHaptic('light');
+              if (onOpenAdmin) onOpenAdmin();
+              setActiveTab('admin');
+            }}
+            className={`flex-1 py-2 flex items-center justify-center gap-0.5 text-[11px] font-extrabold transition-all relative ${
+              activeTab === 'admin'
+                ? 'text-rose-600 border-b-2 border-rose-500 bg-rose-500/10'
+                : 'text-rose-500 hover:text-rose-700'
+            }`}
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Admin</span>
+          </button>
+        )}
       </nav>
     </header>
   );

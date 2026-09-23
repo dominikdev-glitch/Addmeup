@@ -36,12 +36,11 @@ export default function App() {
     updateHandles,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'feed' | 'post' | 'verifications' | 'wallet' | 'transactions'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'post' | 'verifications' | 'wallet' | 'transactions' | 'admin'>('feed');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showMyAdsModal, setShowMyAdsModal] = useState(false);
   const [showDailyBonusModal, setShowDailyBonusModal] = useState(false);
-  const [showAdminModal, setShowAdminModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedAdForBoost, setSelectedAdForBoost] = useState<Ad | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -222,11 +221,11 @@ export default function App() {
         onSignIn={() => setShowAuthModal(true)}
         onOpenMyAds={() => setShowMyAdsModal(true)}
         onOpenDailyBonus={() => setShowDailyBonusModal(true)}
-        onOpenAdmin={() => setShowAdminModal(true)}
+        onOpenAdmin={() => setActiveTab('admin')}
       />
 
       {/* Main Content Viewport */}
-      <main className="flex-1 w-full max-w-md md:max-w-4xl lg:max-w-6xl mx-auto relative">
+      <main className={`flex-1 w-full ${activeTab === 'admin' ? 'max-w-full' : 'max-w-md md:max-w-4xl lg:max-w-6xl mx-auto'} relative`}>
         
         {/* Auth Toast Warning if any */}
         {authError && (
@@ -293,6 +292,43 @@ export default function App() {
             onRequireAuth={() => setShowAuthModal(true)}
             onToast={showToast}
           />
+        )}
+
+        {/* Full Dedicated Page for Admin */}
+        {activeTab === 'admin' && (
+          profile && (profile.isAdmin || profile.email === 'heisgag1@gmail.com') ? (
+            <AdminPage
+              currentProfile={profile}
+              onToast={showToast}
+              onNavigateTab={setActiveTab}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-12 p-8 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-4 text-white shadow-xl">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-black">Admin Access Restricted</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                You must be logged in with an administrator account to access the Admin Console.
+              </p>
+              <div className="pt-2 flex justify-center gap-2">
+                <button
+                  onClick={() => setActiveTab('feed')}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all"
+                >
+                  Return to Feed
+                </button>
+                {!user && (
+                  <button
+                    onClick={() => setShowAuthModal(true)}
+                    className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-black transition-all"
+                  >
+                    Sign In
+                  </button>
+                )}
+              </div>
+            </div>
+          )
         )}
       </main>
 
@@ -380,15 +416,6 @@ export default function App() {
         />
       )}
 
-      {/* Admin Panel Modal for Admins */}
-      {showAdminModal && profile && (
-        <AdminPage
-          currentProfile={profile}
-          onClose={() => setShowAdminModal(false)}
-          onToast={showToast}
-        />
-      )}
-
       {/* User Profile Settings Modal */}
       {showProfileModal && (
         <UserProfileModal
@@ -397,7 +424,7 @@ export default function App() {
           onUpdateHandles={updateHandles}
           onSignOut={signOut}
           onToast={showToast}
-          onOpenAdmin={() => setShowAdminModal(true)}
+          onOpenAdmin={() => setActiveTab('admin')}
         />
       )}
 

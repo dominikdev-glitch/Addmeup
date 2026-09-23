@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
+import { normalizeWhatsAppNumber } from '../lib/phone';
 import { UserProfile } from '../types';
 import { processReferralReward } from '../lib/transactions';
 
@@ -62,18 +63,27 @@ export function useAuth() {
       }
 
       if (currentUser) {
+        try {
+          localStorage.setItem('addmeup_has_account', 'true');
+          if (currentUser.email) {
+            localStorage.setItem('addmeup_saved_email', currentUser.email);
+          }
+          localStorage.setItem('addmeup_last_login', Date.now().toString());
+        } catch (e) {
+          // Ignore localStorage issues
+        }
+
         const userRef = doc(db, 'users', currentUser.uid);
         const myReferralCode = `UP-${currentUser.uid.slice(0, 6).toUpperCase()}`;
 
-        // Immediate fallback profile so UI remains interactive
-        const isDefaultAdmin = currentUser.email === 'heisgag1@gmail.com';
+        // Immediate fallback profile so UI remains interactive - isAdmin is strictly false by default
         setProfile({
           uid: currentUser.uid,
           username: currentUser.displayName || `User_${currentUser.uid.slice(0, 5)}`,
           email: currentUser.email || undefined,
           photoUrl: currentUser.photoURL || undefined,
           creditBalance: 20,
-          isAdmin: isDefaultAdmin,
+          isAdmin: false,
           isBanned: false,
           snapchatHandle: '',
           whatsappNumber: '',
@@ -93,12 +103,13 @@ export function useAuth() {
           async (snapshot) => {
             if (snapshot.exists()) {
               const data = snapshot.data();
-              const isAdmin = Boolean(data.isAdmin || isDefaultAdmin);
+              // isAdmin is strictly false unless manually enabled to true in Firestore or via the Admin Dashboard
+              const isAdmin = data.isAdmin === true;
               const isBanned = Boolean(data.isBanned);
 
-              // If owner email signs in and is not marked isAdmin yet, save it to firestore
-              if (isDefaultAdmin && !data.isAdmin) {
-                setDoc(userRef, { isAdmin: true }, { merge: true }).catch(console.error);
+              // If legacy document exists without explicit isAdmin field, ensure isAdmin: false is explicitly set in Firestore
+              if (data.isAdmin === undefined) {
+                setDoc(userRef, { isAdmin: false }, { merge: true }).catch(console.error);
               }
 
               setProfile({
@@ -122,7 +133,7 @@ export function useAuth() {
                 createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
               });
             } else {
-              // Create user document if it does not exist yet
+              // Create user document if it does not exist yet - ALWAYS set isAdmin: false
               const storedRef = localStorage.getItem('addmeup_ref');
               
               await setDoc(
@@ -132,7 +143,7 @@ export function useAuth() {
                   username: currentUser.displayName || `User_${currentUser.uid.slice(0, 5)}`,
                   email: currentUser.email || '',
                   creditBalance: 20, // Initial welcome bonus
-                  isAdmin: isDefaultAdmin,
+                  isAdmin: false, // Always false by default until manually enabled
                   isBanned: false,
                   referralCode: myReferralCode,
                   referralsCount: 0,
@@ -203,14 +214,19 @@ export function useAuth() {
     try {
       setError(null);
       await signInWithEmailAndPassword(auth, email.trim(), pass);
+      try {
+        localStorage.setItem('addmeup_has_account', 'true');
+        localStorage.setItem('addmeup_saved_email', email.trim());
+        localStorage.setItem('addmeup_last_login', Date.now().toString());
+      } catch (e) {}
     } catch (err: any) {
       console.error("Email sign-in error:", err);
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         const isGmail = email.trim().toLowerCase().includes('@gmail.com') || email.trim().toLowerCase().includes('@googlemail.com');
         if (isGmail) {
-          throw new Error("No password match found for this Google email. If you signed up with Google, tap 'Continue with Google', or click 'Forgot/Set Password' to create a password.");
+          throw new Error("No password match found for this Google email. If you haven't registered yet, tap 'Create Account' to sign up (+20 Pts). If you previously signed in with Google, tap 'Continue with Google'.");
         }
-        throw new Error("Invalid email or password. Please check your credentials or create an account.");
+        throw new Error("No account found matching this email & password. If you don't have an account yet, tap 'Create Account' below to register free (+20 Pts)!");
       } else if (err.code === 'auth/invalid-email') {
         throw new Error("Please provide a valid email address.");
       } else {
@@ -223,6 +239,11 @@ export function useAuth() {
     try {
       setError(null);
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      try {
+        localStorage.setItem('addmeup_has_account', 'true');
+        localStorage.setItem('addmeup_saved_email', email.trim());
+        localStorage.setItem('addmeup_last_login', Date.now().toString());
+      } catch (e) {}
       if (cred.user && username.trim()) {
         try {
           await updateFirebaseProfile(cred.user, {
@@ -277,9 +298,10 @@ export function useAuth() {
   const updateHandles = async (snapchatHandle: string, whatsappNumber: string, username?: string, photoUrl?: string) => {
     if (!user) return;
     const userRef = doc(db, 'users', user.uid);
+    const cleanedWhatsapp = whatsappNumber.trim() ? normalizeWhatsAppNumber(whatsappNumber) : '';
     await setDoc(userRef, {
       snapchatHandle: snapchatHandle.trim(),
-      whatsappNumber: whatsappNumber.trim(),
+      whatsappNumber: cleanedWhatsapp,
       ...(username ? { username: username.trim() } : {}),
       ...(photoUrl !== undefined ? { photoUrl: photoUrl || null } : {}),
     }, { merge: true });

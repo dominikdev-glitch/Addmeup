@@ -12,16 +12,24 @@ import {
   UserCheck,
   QrCode,
   Smartphone,
-  Download
+  Download,
+  ThumbsUp
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { submitClaimVerification, generateVerificationCode, recordAdClick } from '../lib/transactions';
 import { PlatformIcon } from './PlatformIcon';
 import { getEffectiveAvatar, getEffectiveAdCover, getEffectiveAdDescription } from '../lib/avatar';
 import { triggerHaptic, openNativeAppOrWeb } from '../lib/device';
+import { normalizeWhatsAppNumber } from '../lib/phone';
 import { getCreatorBadge } from '../lib/badges';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { 
+  isAdLikedLocally, 
+  setAdLikedLocally, 
+  toggleAdLikeInFirestore, 
+  getVisitorOrUserId 
+} from '../lib/likes';
 
 interface AddModalProps {
   ad: Ad;
@@ -42,6 +50,48 @@ export const AddModal: React.FC<AddModalProps> = ({
 }) => {
   const isSnapchat = ad.platform === 'snapchat';
 
+  // Likes / Thumbs State
+  const [isLiked, setIsLiked] = useState<boolean>(() => isAdLikedLocally(ad.adId));
+  const [likesCount, setLikesCount] = useState<number>(() => Number(ad.likesCount || 0));
+  const [isLiking, setIsLiking] = useState<boolean>(false);
+  const [likePopping, setLikePopping] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof ad.likesCount === 'number') {
+      setLikesCount(ad.likesCount);
+    }
+  }, [ad.likesCount]);
+
+  const handleToggleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    triggerHaptic('medium');
+
+    const nextLiked = !isLiked;
+    const nextCount = Math.max(0, likesCount + (nextLiked ? 1 : -1));
+
+    setIsLiked(nextLiked);
+    setLikesCount(nextCount);
+    setAdLikedLocally(ad.adId, nextLiked);
+    setLikePopping(true);
+    setTimeout(() => setLikePopping(false), 350);
+
+    try {
+      setIsLiking(true);
+      const visitorOrUid = getVisitorOrUserId(userId);
+      const res = await toggleAdLikeInFirestore(ad.adId, visitorOrUid);
+      setLikesCount(res.newLikesCount);
+      setIsLiked(res.liked);
+      setAdLikedLocally(ad.adId, res.liked);
+    } catch (err) {
+      console.warn("Could not save like:", err);
+      setIsLiked(!nextLiked);
+      setLikesCount(likesCount);
+      setAdLikedLocally(ad.adId, !nextLiked);
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
   // State
   const [activeMode, setActiveMode] = useState<'direct' | 'qrcode'>('direct');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -59,7 +109,7 @@ export const AddModal: React.FC<AddModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const cleanTarget = ad.targetHandleOrNumber.replace('@', '').trim();
-  const cleanPhone = ad.targetHandleOrNumber.replace(/[^0-9]/g, '');
+  const cleanPhone = normalizeWhatsAppNumber(ad.targetHandleOrNumber);
 
   // Pre-filled WhatsApp message
   const waMessage = `Hi! I found you on AddMeUp. Verification Code: #${verificationCode}`;
@@ -283,9 +333,26 @@ export const AddModal: React.FC<AddModalProps> = ({
               </div>
             </div>
 
-            <div className="bg-orange-500 text-white px-2.5 py-1 rounded-full text-[11px] font-black shadow-md flex items-center gap-1 mb-1">
-              <span>🪙</span>
-              <span>+{ad.rewardPerAdd || 5} Cr</span>
+            <div className="flex items-center gap-1.5 mb-1">
+              <button
+                type="button"
+                onClick={handleToggleLike}
+                disabled={isLiking}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-black shadow-md flex items-center gap-1.5 transition-all active:scale-90 border select-none ${
+                  isLiked
+                    ? 'bg-orange-500 text-white border-orange-400 ring-2 ring-orange-400/30'
+                    : 'bg-white/10 hover:bg-white/20 text-slate-200 border-white/20'
+                }`}
+                title={isLiked ? "Unlike ad" : "Thumbs up this ad"}
+              >
+                <ThumbsUp className={`w-3.5 h-3.5 ${isLiked ? 'fill-white text-white' : ''} ${likePopping ? 'scale-125' : ''}`} />
+                <span>{likesCount}</span>
+              </button>
+
+              <div className="bg-orange-500 text-white px-2.5 py-1 rounded-full text-[11px] font-black shadow-md flex items-center gap-1">
+                <span>🪙</span>
+                <span>+{ad.rewardPerAdd || 5} Cr</span>
+              </div>
             </div>
           </div>
 

@@ -19,7 +19,8 @@ import {
   PlusCircle, 
   RefreshCw, 
   Rocket,
-  Flame 
+  Flame,
+  LayoutGrid
 } from 'lucide-react';
 import { triggerHaptic } from '../lib/device';
 
@@ -110,6 +111,7 @@ export const FeedPage: React.FC<FeedPageProps> = ({
               targetHandleOrNumber: typeof raw.targetHandleOrNumber === 'string' ? raw.targetHandleOrNumber : '',
               platform: raw.platform === 'whatsapp' ? 'whatsapp' : 'snapchat',
               category: raw.category || 'Friends',
+              likesCount: Number(raw.likesCount || 0),
             } as Ad);
           }
         } catch (err) {
@@ -209,9 +211,10 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   });
 
   const boostedCount = sortedFilteredAds.filter(a => a.boostedUntil && a.boostedUntil > Date.now()).length;
+  const isTwoPerRow = sortedFilteredAds.length > 10;
 
   return (
-    <div className="space-y-3 pb-20 max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-3.5 pt-3">
+    <div className={`space-y-3 pb-20 mx-auto px-3.5 pt-3 ${isTwoPerRow ? 'max-w-6xl' : 'max-w-md md:max-w-4xl lg:max-w-6xl'}`}>
       {/* Desktop & Mobile Filters Bar */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
         {/* Search Input */}
@@ -319,8 +322,8 @@ export const FeedPage: React.FC<FeedPageProps> = ({
         </div>
       ) : (
         <div className="space-y-2.5">
-          <div className="flex items-center justify-between text-[11px] text-slate-600 px-1 font-bold">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between text-[11px] text-slate-600 px-1 font-bold flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span>Live Social Ads ({sortedFilteredAds.length})</span>
               {boostedCount > 0 && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-900 rounded-full text-[10px] font-black border border-amber-300">
@@ -328,15 +331,26 @@ export const FeedPage: React.FC<FeedPageProps> = ({
                   <span>{boostedCount} VIP Boosted</span>
                 </span>
               )}
+              {isTwoPerRow && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-950 rounded-full text-[10px] font-black border border-orange-200 shadow-2xs">
+                  <LayoutGrid className="w-2.5 h-2.5 text-orange-600" />
+                  <span>2 Cards / Row (10+ Active)</span>
+                </span>
+              )}
             </div>
             <span className="text-orange-600 font-extrabold">+5 Points per Add</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+          <div className={
+            isTwoPerRow 
+              ? "grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-4 md:gap-5" 
+              : "grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6"
+          }>
             {sortedFilteredAds.map((ad) => (
               <AdCard
                 key={ad.adId}
                 ad={ad}
+                compact={isTwoPerRow}
                 currentUserId={userUid}
                 isClaimed={claimedAdIds.has(ad.adId)}
                 onSelectAd={(selectedAd) => {

@@ -48,6 +48,8 @@ export async function triggerNativeShare(payload: NativeSharePayload): Promise<b
   return false;
 }
 
+import { normalizeWhatsAppNumber } from './phone';
+
 export interface DeepLinkResult {
   fallbackUrl: string;
   nativeSchemeUrl?: string;
@@ -60,7 +62,7 @@ export interface DeepLinkResult {
 export function getNativeAppLinks(platform: 'snapchat' | 'whatsapp', targetHandleOrNumber: string, messageText?: string): DeepLinkResult {
   const isMobile = typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
   const cleanTarget = targetHandleOrNumber.replace('@', '').trim();
-  const cleanPhone = targetHandleOrNumber.replace(/[^0-9]/g, '');
+  const cleanPhone = normalizeWhatsAppNumber(targetHandleOrNumber);
 
   if (platform === 'snapchat') {
     return {
@@ -68,11 +70,13 @@ export function getNativeAppLinks(platform: 'snapchat' | 'whatsapp', targetHandl
       fallbackUrl: `https://snapchat.com/add/${cleanTarget}`,
     };
   } else {
-    // WhatsApp
+    // WhatsApp - cleanPhone is normalized with proper country code (e.g. 2348108237903)
     const encoded = messageText ? encodeURIComponent(messageText) : '';
     return {
       nativeSchemeUrl: cleanPhone ? `whatsapp://send?phone=${cleanPhone}${encoded ? `&text=${encoded}` : ''}` : undefined,
-      fallbackUrl: `https://wa.me/${cleanPhone}${encoded ? `?text=${encoded}` : ''}`,
+      fallbackUrl: cleanPhone 
+        ? `https://wa.me/${cleanPhone}${encoded ? `?text=${encoded}` : ''}`
+        : 'https://wa.me',
     };
   }
 }

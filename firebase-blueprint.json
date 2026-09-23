@@ -20,6 +20,8 @@
         "totalClaimsCount": { "type": "number" },
         "dailyStreak": { "type": "number" },
         "lastDailyBonusDate": { "type": "string" },
+        "isAdmin": { "type": "boolean" },
+        "isBanned": { "type": "boolean" },
         "createdAt": { "type": "string" }
       },
       "required": ["uid", "username", "creditBalance"]
@@ -48,7 +50,8 @@
         "boostedUntil": { "type": "number" },
         "boostTier": { "type": "string" },
         "viewsCount": { "type": "number" },
-        "clicksCount": { "type": "number" }
+        "clicksCount": { "type": "number" },
+        "likesCount": { "type": "number" }
       },
       "required": ["adId", "userId", "title", "platform", "targetHandleOrNumber", "status", "expiresAt", "createdAt"]
     },
@@ -127,6 +130,18 @@
         "createdAt": { "type": "number" }
       },
       "required": ["reportId", "adId", "reportedUserId", "reporterUid", "reason", "status", "createdAt"]
+    },
+    "AdLike": {
+      "title": "AdLike",
+      "description": "Like or thumbs up on an ad from any user or visitor",
+      "type": "object",
+      "properties": {
+        "likeId": { "type": "string" },
+        "adId": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["likeId", "adId", "userId", "createdAt"]
     }
   },
   "firestore": {
@@ -137,6 +152,10 @@
     "/ads/{adId}": {
       "schema": "Ad",
       "description": "Public social ads for Snapchat and WhatsApp"
+    },
+    "/ad_likes/{likeId}": {
+      "schema": "AdLike",
+      "description": "Likes and thumbs up cast by users on promotional ads"
     },
     "/claims/{claimId}": {
       "schema": "Claim",

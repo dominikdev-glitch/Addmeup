@@ -12,12 +12,15 @@ import {
   CheckCircle2,
   TrendingUp,
   Eye,
-  MousePointerClick
+  MousePointerClick,
+  ThumbsUp,
+  RotateCcw
 } from 'lucide-react';
 import { PlatformIcon } from './PlatformIcon';
 import { getEffectiveAvatar } from '../lib/avatar';
 import { triggerHaptic } from '../lib/device';
 import { togglePauseAd, extendAdDuration, deleteAdPermanently } from '../lib/transactions';
+import { saveExpiredAdToLocalStorage } from '../lib/adDrafts';
 
 interface MyAdsModalProps {
   userId: string;
@@ -27,6 +30,7 @@ interface MyAdsModalProps {
   onOpenCreateAd: () => void;
   onBoostAd: (ad: Ad) => void;
   onBalanceUpdated?: (newBalance: number) => void;
+  onReuseAd?: (ad: Ad) => void;
 }
 
 export const MyAdsModal: React.FC<MyAdsModalProps> = ({
@@ -37,6 +41,7 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
   onOpenCreateAd,
   onBoostAd,
   onBalanceUpdated,
+  onReuseAd,
 }) => {
   const userAds = ads.filter((a) => a.userId === userId);
 
@@ -275,7 +280,7 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
                   </div>
 
                   {/* Performance Metrics Bar for this Ad */}
-                  <div className="bg-slate-950/60 rounded-xl p-2 flex items-center justify-between text-[11px] border border-white/10 font-medium">
+                  <div className="bg-slate-950/60 rounded-xl p-2 flex items-center justify-between text-[11px] border border-white/10 font-medium flex-wrap gap-1">
                     <div className="flex items-center gap-1 text-slate-300">
                       <Eye className="w-3 h-3 text-amber-400" />
                       <span>{views} Views</span>
@@ -283,6 +288,10 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
                     <div className="flex items-center gap-1 text-slate-300">
                       <MousePointerClick className="w-3 h-3 text-orange-400" />
                       <span>{clicks} Taps</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-orange-400">
+                      <ThumbsUp className="w-3 h-3 text-orange-400 fill-orange-400" />
+                      <span>{Number(ad.likesCount || 0)} Likes</span>
                     </div>
                     <div className="flex items-center gap-1 text-emerald-400 font-bold">
                       <TrendingUp className="w-3 h-3" />
@@ -339,6 +348,27 @@ export const MyAdsModal: React.FC<MyAdsModalProps> = ({
                       <Clock className="w-3 h-3 text-amber-400" />
                       <span>{isExpired ? 'Renew' : 'Extend'}</span>
                     </button>
+
+                    {/* Reuse Expired Ad with New Points */}
+                    {isExpired && (
+                      <button
+                        onClick={() => {
+                          saveExpiredAdToLocalStorage(userId, ad);
+                          triggerHaptic('medium');
+                          if (onReuseAd) {
+                            onReuseAd(ad);
+                          } else {
+                            onOpenCreateAd();
+                          }
+                          onClose();
+                        }}
+                        className="py-1 px-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-lg text-[10px] font-black flex items-center gap-1 shadow-2xs transition-all active:scale-95"
+                        title="Reuse this ad with new points"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Reuse Ad</span>
+                      </button>
+                    )}
 
                     <div className="flex-1" />
 

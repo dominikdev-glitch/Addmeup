@@ -3,6 +3,7 @@ import { UserProfile } from '../types';
 import { X, LogOut, Check, User, Save, ShieldAlert } from 'lucide-react';
 import { PlatformIcon } from './PlatformIcon';
 import { AvatarPicker } from './AvatarPicker';
+import { normalizeWhatsAppNumber, parseSmartPhone, formatWhatsAppDisplay } from '../lib/phone';
 
 interface UserProfileModalProps {
   profile: UserProfile | null;
@@ -31,7 +32,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     e.preventDefault();
     try {
       setIsSaving(true);
-      await onUpdateHandles(snapchatHandle, whatsappNumber, username, photoUrl);
+      const cleanedWhatsapp = whatsappNumber.trim() ? normalizeWhatsAppNumber(whatsappNumber) : '';
+      await onUpdateHandles(snapchatHandle.trim(), cleanedWhatsapp, username.trim(), photoUrl);
       onToast("Profile & photo updated! ✅");
       onClose();
     } catch (err) {
@@ -104,17 +106,51 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1 flex items-center gap-1.5">
-              <PlatformIcon platform="whatsapp" size="sm" />
-              <span>Default WhatsApp Number</span>
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                <PlatformIcon platform="whatsapp" size="sm" />
+                <span>Default WhatsApp Number</span>
+              </label>
+              <span className="text-[10px] font-bold text-emerald-600">⚡ Auto-Fix</span>
+            </div>
             <input
               type="text"
               value={whatsappNumber}
               onChange={(e) => setWhatsappNumber(e.target.value)}
-              placeholder="+1 234 567 8900"
-              className="w-full bg-white/80 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-emerald-700 placeholder-slate-400 focus:outline-none focus:border-orange-500 shadow-2xs"
+              onBlur={() => {
+                if (whatsappNumber.trim()) {
+                  const smart = parseSmartPhone(whatsappNumber);
+                  if (smart.isValid && smart.formattedDisplay) {
+                    setWhatsappNumber(smart.formattedDisplay);
+                  }
+                }
+              }}
+              placeholder="e.g. 08108237903, 8108237903, or +234..."
+              className="w-full bg-white/80 border border-slate-200 rounded-xl p-2.5 text-xs font-mono font-bold text-emerald-700 placeholder-slate-400 focus:outline-none focus:border-emerald-500 shadow-2xs"
             />
+            {whatsappNumber.trim() && (() => {
+              const smart = parseSmartPhone(whatsappNumber);
+              return (
+                <div className="mt-1.5 p-2 rounded-lg bg-emerald-50/80 border border-emerald-200/80 text-[11px] text-emerald-900 space-y-0.5">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-bold flex items-center gap-1 truncate">
+                      <span>{smart.isNigerian ? '🇳🇬' : '🌍'}</span>
+                      <span>Format: {smart.formattedDisplay}</span>
+                    </span>
+                    {smart.isValid && (
+                      <span className="text-[9px] px-1 bg-emerald-600 text-white rounded font-bold">
+                        OK
+                      </span>
+                    )}
+                  </div>
+                  {smart.correctionApplied && (
+                    <p className="text-[10px] text-emerald-700 font-medium">
+                      ✨ {smart.correctionApplied}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <button
