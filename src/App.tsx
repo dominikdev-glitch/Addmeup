@@ -4,6 +4,7 @@ import { Header } from './components/Header';
 import { FeedPage } from './components/FeedPage';
 import { PostAdPage } from './components/PostAdPage';
 import { WalletPage } from './components/WalletPage';
+import { TransactionsPage } from './components/TransactionsPage';
 import { VerificationsPage } from './components/VerificationsPage';
 import { LandingPage } from './components/LandingPage';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -35,7 +36,7 @@ export default function App() {
     updateHandles,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'feed' | 'post' | 'verifications' | 'wallet'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'post' | 'verifications' | 'wallet' | 'transactions'>('feed');
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showMyAdsModal, setShowMyAdsModal] = useState(false);
@@ -278,6 +279,17 @@ export default function App() {
             userUid={user?.uid || null}
             profile={profile}
             onNavigateFeed={() => setActiveTab('feed')}
+            onViewAllTransactions={() => setActiveTab('transactions')}
+            onRequireAuth={() => setShowAuthModal(true)}
+            onToast={showToast}
+          />
+        )}
+
+        {activeTab === 'transactions' && (
+          <TransactionsPage
+            userUid={user?.uid || null}
+            profile={profile}
+            onBack={() => setActiveTab('wallet')}
             onRequireAuth={() => setShowAuthModal(true)}
             onToast={showToast}
           />

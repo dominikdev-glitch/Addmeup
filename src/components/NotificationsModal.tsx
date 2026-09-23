@@ -25,17 +25,21 @@ import {
   Trash2, 
   CheckCheck,
   BellRing,
-  Volume2
+  AlertCircle,
+  Sparkles,
+  Info
 } from 'lucide-react';
 import { 
   isNotificationSupported, 
   getNotificationPermission, 
   requestNotificationPermission, 
-  areNotificationsEnabled, 
-  setNotificationsEnabledPreference, 
-  triggerSystemNotification 
+  triggerSystemNotification,
+  isIOS,
+  isPWAStandalone,
+  isIframeEnvironment
 } from '../lib/pushNotifications';
 import { triggerHaptic } from '../lib/device';
+import { SwipeableNotificationItem } from './SwipeableNotificationItem';
 
 interface NotificationsModalProps {
   isOpen: boolean;
@@ -53,6 +57,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [pushStatus, setPushStatus] = useState<string>('checking');
+  const [pushFeedback, setPushFeedback] = useState<{ type: 'success' | 'warning' | 'info'; text: string } | null>(null);
+  const [requestingPush, setRequestingPush] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !userUid) {
@@ -93,6 +99,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     if (isOpen) {
       const perm = getNotificationPermission();
       setPushStatus(perm);
+      setPushFeedback(null);
     }
   }, [isOpen]);
 
@@ -111,23 +118,67 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   };
 
   const handleMarkAllRead = async () => {
+    triggerHaptic('light');
     await markAllNotificationsAsRead(notifications);
   };
 
-  const handleDelete = async (e: React.MouseEvent, notificationId: string) => {
-    e.stopPropagation();
-    await deleteNotification(notificationId);
+  const handleDeleteItem = async (notificationId: string) => {
+    // Optimistic UI update
+    setNotifications((prev) => prev.filter((n) => n.notificationId !== notificationId));
+    try {
+      await deleteNotification(notificationId);
+    } catch (err) {
+      console.error('Failed to delete notification:', err);
+    }
   };
 
   const handleEnablePush = async () => {
+    setRequestingPush(true);
     triggerHaptic('medium');
-    const perm = await requestNotificationPermission();
-    setPushStatus(perm);
-    if (perm === 'granted') {
-      triggerHaptic('success');
-      triggerSystemNotification('Notifications Activated 🔔', {
-        body: 'You will receive instant alerts for new claims, approvals, and daily rewards!',
+    setPushFeedback(null);
+
+    try {
+      const result = await requestNotificationPermission();
+      setPushStatus(result.permission);
+
+      if (result.permission === 'granted') {
+        triggerHaptic('success');
+        setPushFeedback({
+          type: 'success',
+          text: 'Push notifications activated! You will receive instant alerts for claims and rewards.',
+        });
+        await triggerSystemNotification('Notifications Activated 🔔', {
+          body: 'You will receive instant alerts for new claims, approvals, and daily rewards!',
+        });
+      } else if (result.permission === 'denied') {
+        triggerHaptic('warning');
+        setPushFeedback({
+          type: 'warning',
+          text: 'Notifications are blocked in your browser settings. Tap the lock/tune icon near your browser address bar to allow.',
+        });
+      } else if (result.needsIOSPwa) {
+        setPushFeedback({
+          type: 'info',
+          text: 'On iOS, push alerts require AddMeUp installed to Home Screen (Tap Share ⎋ -> Add to Home Screen).',
+        });
+      } else if (result.isIframe) {
+        setPushFeedback({
+          type: 'info',
+          text: 'Notifications are restricted inside the embedded preview. Please open the standalone app URL.',
+        });
+      } else if (result.error) {
+        setPushFeedback({
+          type: 'warning',
+          text: result.error,
+        });
+      }
+    } catch (e: any) {
+      setPushFeedback({
+        type: 'warning',
+        text: e?.message || 'Could not enable notifications.',
       });
+    } finally {
+      setRequestingPush(false);
     }
   };
 
@@ -215,31 +266,68 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           </div>
         </div>
 
-        {/* Push Notification Banner */}
-        {isNotificationSupported() && pushStatus !== 'granted' && (
+        {/* Push Notification Action / Banner */}
+        {pushStatus !== 'granted' && (
           <div className="my-2 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs">
             <div className="flex items-center gap-2">
-              <BellRing className="w-4 h-4 text-orange-600 flex-shrink-0" />
+              <BellRing className="w-4 h-4 text-orange-600 flex-shrink-0 animate-bounce" />
               <div>
                 <div className="text-[11px] font-black text-slate-900 leading-tight">
                   Enable Push Notifications
                 </div>
                 <div className="text-[9px] text-slate-500 leading-snug">
-                  Get instant alerts when someone claims or approves your adds
+                  Get instant lockscreen alerts for claim verifications and rewards
                 </div>
               </div>
             </div>
             <button
               onClick={handleEnablePush}
-              className="py-1 px-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-xs transition-all active:scale-95 flex-shrink-0"
+              disabled={requestingPush}
+              className="py-1 px-2.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-black uppercase tracking-wider shadow-xs transition-all active:scale-95 flex-shrink-0 cursor-pointer"
             >
-              Allow
+              {requestingPush ? 'Allowing...' : 'Allow'}
             </button>
           </div>
         )}
 
+        {/* Feedback Alert if push permission was clicked */}
+        {pushFeedback && (
+          <div
+            className={`my-1.5 p-2 rounded-xl text-xs flex items-start gap-2 ${
+              pushFeedback.type === 'success'
+                ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                : pushFeedback.type === 'warning'
+                ? 'bg-rose-50 border border-rose-200 text-rose-800'
+                : 'bg-blue-50 border border-blue-200 text-blue-800'
+            }`}
+          >
+            {pushFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+            ) : pushFeedback.type === 'warning' ? (
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+            ) : (
+              <Info className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+            )}
+            <span className="text-[11px] font-semibold leading-snug flex-1">{pushFeedback.text}</span>
+            <button
+              onClick={() => setPushFeedback(null)}
+              className="text-slate-400 hover:text-slate-600 p-0.5"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* List Header Hint */}
+        {notifications.length > 0 && (
+          <div className="flex items-center justify-between text-[10px] text-slate-400 py-1 px-1 font-semibold border-b border-slate-100">
+            <span>👈 Swipe left on any card to delete</span>
+            <span>{notifications.length} update{notifications.length > 1 ? 's' : ''}</span>
+          </div>
+        )}
+
         {/* Notifications List */}
-        <div className="flex-1 overflow-y-auto py-2 space-y-2 divide-y divide-slate-100">
+        <div className="flex-1 overflow-y-auto py-2 space-y-1">
           {loading ? (
             <div className="py-12 text-center text-xs font-bold text-slate-400">
               Loading updates...
@@ -251,51 +339,19 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               </div>
               <p className="text-xs font-bold text-slate-700">No Notifications Yet</p>
               <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-                When you earn credits, receive verification requests, or get approvals, they'll appear here.
+                When you earn points, receive verification requests, or get approvals, they'll appear here.
               </p>
             </div>
           ) : (
             notifications.map((item) => (
-              <div
+              <SwipeableNotificationItem
                 key={item.notificationId}
+                item={item}
                 onClick={() => handleNotificationClick(item)}
-                className={`pt-2 flex items-start gap-3 p-2 rounded-xl transition-all cursor-pointer ${
-                  item.read ? 'hover:bg-slate-50/80 opacity-80' : 'bg-orange-50/60 hover:bg-orange-50 border border-orange-100/60'
-                }`}
-              >
-                {getIcon(item.type)}
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-1">
-                    <h4 className={`text-xs font-bold leading-tight ${item.read ? 'text-slate-800' : 'text-slate-900 font-extrabold'}`}>
-                      {item.title}
-                    </h4>
-                    <span className="text-[10px] text-slate-400 flex-shrink-0">
-                      {formatTimeAgo(item.createdAt)}
-                    </span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-600 mt-0.5 leading-snug line-clamp-2">
-                    {item.message}
-                  </p>
-
-                  <div className="flex items-center justify-between mt-1.5 pt-0.5">
-                    {item.linkTab && (
-                      <span className="text-[10px] font-bold text-orange-600 flex items-center gap-1 hover:underline">
-                        <span>View in {item.linkTab}</span>
-                        <ArrowRight className="w-2.5 h-2.5" />
-                      </span>
-                    )}
-                    <button
-                      onClick={(e) => handleDelete(e, item.notificationId)}
-                      className="text-slate-300 hover:text-rose-500 p-0.5 rounded transition-colors ml-auto"
-                      title="Delete notification"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+                onDelete={() => handleDeleteItem(item.notificationId)}
+                formatTimeAgo={formatTimeAgo}
+                getIcon={getIcon}
+              />
             ))
           )}
         </div>
@@ -303,3 +359,4 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     </div>
   );
 };
+

@@ -17,8 +17,8 @@ import { triggerHaptic } from '../lib/device';
 
 interface HeaderProps {
   profile: UserProfile | null;
-  activeTab: 'feed' | 'post' | 'verifications' | 'wallet';
-  setActiveTab: (tab: 'feed' | 'post' | 'verifications' | 'wallet') => void;
+  activeTab: 'feed' | 'post' | 'verifications' | 'wallet' | 'transactions';
+  setActiveTab: (tab: 'feed' | 'post' | 'verifications' | 'wallet' | 'transactions') => void;
   pendingCount?: number;
   unreadNotifCount?: number;
   onOpenNotifications?: () => void;
@@ -114,7 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => setActiveTab('wallet')}
             className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all flex items-center gap-1.5 ${
-              activeTab === 'wallet'
+              activeTab === 'wallet' || activeTab === 'transactions'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -260,7 +260,7 @@ export const Header: React.FC<HeaderProps> = ({
             setActiveTab('wallet');
           }}
           className={`flex-1 py-2 flex items-center justify-center gap-0.5 text-[11px] font-extrabold transition-all relative ${
-            activeTab === 'wallet'
+            activeTab === 'wallet' || activeTab === 'transactions'
               ? 'text-orange-600 border-b-2 border-orange-500 bg-orange-500/10'
               : 'text-slate-500 hover:text-slate-800'
           }`}

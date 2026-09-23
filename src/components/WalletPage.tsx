@@ -8,6 +8,7 @@ import {
   Wallet, 
   ArrowDownLeft, 
   ArrowUpRight, 
+  ArrowRight,
   Plus, 
   RefreshCw, 
   Compass,
@@ -26,6 +27,7 @@ interface WalletPageProps {
   userUid: string | null;
   profile: UserProfile | null;
   onNavigateFeed: () => void;
+  onViewAllTransactions: () => void;
   onRequireAuth: () => void;
   onToast: (msg: string) => void;
 }
@@ -34,6 +36,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
   userUid,
   profile,
   onNavigateFeed,
+  onViewAllTransactions,
   onRequireAuth,
   onToast,
 }) => {
@@ -297,15 +300,15 @@ export const WalletPage: React.FC<WalletPageProps> = ({
         {/* Right Column: Transaction History Section */}
         <div className="lg:col-span-7 space-y-2.5">
           <h3 className="text-xs font-extrabold text-slate-900 px-1 flex items-center justify-between">
-            <span>Transaction History</span>
+            <span>Recent Activity</span>
             <span className="text-[10px] font-medium text-slate-500">
-              {transactions.length} recent
+              {transactions.length > 0 ? `Showing 3 of ${transactions.length}` : '0 recent'}
             </span>
           </h3>
 
           {!userUid ? (
             <div className="glass-card border border-slate-200/80 rounded-2xl p-4 text-center space-y-1.5">
-              <p className="text-xs text-slate-600 font-medium">Sign in to view your full point history.</p>
+              <p className="text-xs text-slate-600 font-medium">Sign in to view your point history.</p>
               <button
                 onClick={onRequireAuth}
                 className="bg-slate-900 text-white px-3 py-1.5 rounded-lg text-[11px] font-black shadow-xs inline-block"
@@ -325,7 +328,8 @@ export const WalletPage: React.FC<WalletPageProps> = ({
             </div>
           ) : (
             <div className="space-y-1.5">
-              {transactions.map((tx) => {
+              {/* Show only 3 latest transactions */}
+              {transactions.slice(0, 3).map((tx) => {
                 const isPositive = tx.amount > 0;
                 const isDeposit = tx.type === 'deposit';
                 const isReferral = tx.type === 'referral_bonus';
@@ -335,8 +339,8 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                     key={tx.transactionId}
                     className="glass-card border border-slate-200/60 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs hover:border-orange-200 transition-all"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${
                         isReferral
                           ? 'bg-purple-50 text-purple-700 border border-purple-200'
                           : isDeposit
@@ -356,18 +360,18 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                         )}
                       </div>
 
-                      <div>
-                        <h4 className="text-[11px] font-bold text-slate-900 leading-tight">
+                      <div className="min-w-0">
+                        <h4 className="text-[11px] font-bold text-slate-900 leading-tight truncate">
                           {tx.description || (isPositive ? 'Earned Points' : 'Spent Points')}
                         </h4>
-                        <p className="text-[9px] text-slate-400 font-medium leading-tight mt-0.5">
+                        <p className="text-[9px] text-slate-400 font-medium leading-tight mt-0.5 truncate">
                           {new Date(tx.createdAt).toLocaleDateString()} at {new Date(tx.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          {tx.referenceId && ` • Ref: ${tx.referenceId}`}
+                          {tx.referenceId && ` • Ref: ${tx.referenceId.slice(0, 10)}...`}
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <div className={`font-mono text-[11px] font-extrabold px-2 py-0.5 rounded-full border inline-block ${
                         isReferral
                           ? 'bg-purple-50 text-purple-700 border-purple-200'
@@ -388,6 +392,26 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                   </div>
                 );
               })}
+
+              {/* Link button to open full transactions statement page */}
+              <button
+                type="button"
+                onClick={onViewAllTransactions}
+                className="w-full mt-2 py-2.5 px-3 bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 hover:from-orange-100 hover:to-amber-100 border border-orange-200/90 text-orange-900 rounded-xl text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs transition-all active:scale-[0.99] group cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-md bg-orange-600 text-white flex items-center justify-center font-mono text-[10px] font-black shadow-xs">
+                    {transactions.length}
+                  </div>
+                  <span className="font-black text-[11px] text-slate-800">
+                    View Full Transaction History
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 text-[11px] font-black text-orange-600 group-hover:translate-x-0.5 transition-transform">
+                  <span>Statement</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </div>
+              </button>
             </div>
           )}
         </div>
