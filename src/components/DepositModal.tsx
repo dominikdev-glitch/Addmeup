@@ -14,8 +14,7 @@ import {
   RefreshCw,
   AlertCircle,
   Lock,
-  Mail,
-  Zap
+  Mail
 } from 'lucide-react';
 
 interface DepositModalProps {
@@ -126,7 +125,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
         onError: (err) => {
           setIsProcessing(false);
           console.error("Paystack launch error:", err);
-          setErrorMessage("Could not open Paystack window. You can use the instant sandbox test below.");
+          setErrorMessage("Could not open Paystack payment window. Please ensure popups are allowed or check your internet connection.");
         }
       });
 
@@ -137,43 +136,6 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       console.error("Paystack init error:", err);
       setIsProcessing(false);
       setErrorMessage(err.message || "Failed to initialize Paystack.");
-    }
-  };
-
-  // Instant Verification Helper for sandbox / preview testing
-  const handleSimulatedGatewaySuccess = async () => {
-    if (!userUid) {
-      onToast("Please sign in to deposit points.");
-      return;
-    }
-
-    try {
-      setIsProcessing(true);
-      setErrorMessage(null);
-      
-      // Simulate network verification
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      const mockRef = `ADUP-PSTK-TEST-${Date.now().toString().slice(-6)}`;
-      const res = await processCreditDeposit({
-        userId: userUid,
-        credits: totalCredits,
-        amountNgn: totalNgn,
-        paymentMethod: 'Paystack Sandbox',
-        referenceId: mockRef,
-      });
-
-      if (res.success) {
-        setLastRef(mockRef);
-        setLastGateway('Paystack Sandbox');
-        setStep('success');
-        onToast(`Payment Verified! +${totalCredits} Points added to wallet! 🪙`);
-      }
-    } catch (err: any) {
-      console.error("Simulated deposit error:", err);
-      setErrorMessage(err.message || "Failed to process deposit.");
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -427,19 +389,6 @@ export const DepositModal: React.FC<DepositModalProps> = ({
                   </>
                 )}
               </button>
-
-              {/* Instant Simulation option */}
-              <div className="pt-2 border-t border-slate-200 text-center">
-                <button
-                  type="button"
-                  onClick={() => handleSimulatedGatewaySuccess()}
-                  disabled={isProcessing}
-                  className="text-[11px] text-slate-500 hover:text-slate-800 font-bold underline inline-flex items-center gap-1"
-                >
-                  <Zap className="w-3 h-3 text-orange-500" />
-                  <span>Sandbox Testing: Instant Confirm Demo Payment</span>
-                </button>
-              </div>
             </div>
 
             <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-medium">

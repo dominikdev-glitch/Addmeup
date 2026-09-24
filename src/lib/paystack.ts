@@ -18,14 +18,11 @@ declare global {
   }
 }
 
-// Fallback test key if neither .env nor server config is available
-const DEFAULT_TEST_KEY = 'pk_test_b4162ac7f718b0af776e78ae8665324284865b74';
-
-// Cached dynamic public key
+// Cached dynamic public key (live key from server or Vite env)
 let cachedPublicKey: string | null = null;
 
 /**
- * Fetch the active Paystack public key from server environment or Vite client env
+ * Fetch the active live Paystack public key from server environment or Vite client env
  */
 export async function getPaystackPublicKey(): Promise<string> {
   if (cachedPublicKey) return cachedPublicKey;
@@ -51,12 +48,11 @@ export async function getPaystackPublicKey(): Promise<string> {
     return cachedPublicKey;
   }
 
-  return DEFAULT_TEST_KEY;
+  return '';
 }
 
 export const PAYSTACK_PUBLIC_KEY = 
-  (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string) || 
-  DEFAULT_TEST_KEY;
+  (import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string) || '';
 
 /**
  * Load Paystack Inline script dynamically if not present
@@ -103,7 +99,14 @@ export async function triggerPaystackPayment(options: PaystackCheckoutOptions): 
   const isLoaded = await loadPaystackScript();
   const activeKey = await getPaystackPublicKey();
 
-  const ref = options.reference || `ADUP-PSTK-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  if (!activeKey || !activeKey.trim()) {
+    const errorMsg = "Paystack Public Key is not configured. Please set PAYSTACK_PUBLIC_KEY in your environment variables.";
+    console.error('[Paystack]', errorMsg);
+    if (options.onError) options.onError(new Error(errorMsg));
+    return false;
+  }
+
+  const ref = options.reference || `ADUP-PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   if (window.PaystackPop && window.PaystackPop.setup) {
     try {

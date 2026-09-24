@@ -1,17 +1,12 @@
 import crypto from 'crypto';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 
-export const DEFAULT_PAYSTACK_SECRET_KEY = 'sk_test_900e2a1ab4aa94e1d1c5457b0d2848f28d2d50cf';
-export const DEFAULT_PAYSTACK_PUBLIC_KEY = 'pk_test_b4162ac7f718b0af776e78ae8665324284865b74';
-
 export const PAYSTACK_SECRET_KEY = 
-  process.env.PAYSTACK_SECRET_KEY || 
-  DEFAULT_PAYSTACK_SECRET_KEY;
+  process.env.PAYSTACK_SECRET_KEY || '';
 
 export const PAYSTACK_PUBLIC_KEY = 
   process.env.PAYSTACK_PUBLIC_KEY || 
-  process.env.VITE_PAYSTACK_PUBLIC_KEY || 
-  DEFAULT_PAYSTACK_PUBLIC_KEY;
+  process.env.VITE_PAYSTACK_PUBLIC_KEY || '';
 
 /**
  * Verify Paystack transaction by reference with Paystack API

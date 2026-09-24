@@ -207,25 +207,27 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fffaf0] text-slate-800 flex flex-col selection:bg-orange-500 selection:text-white">
+    <div className={`min-h-screen ${activeTab === 'admin' ? 'bg-slate-950 text-slate-100' : 'bg-[#fffaf0] text-slate-800'} flex flex-col selection:bg-orange-500 selection:text-white`}>
       
-      {/* Top Header */}
-      <Header
-        profile={profile}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        pendingCount={pendingClaimsCount}
-        unreadNotifCount={unreadNotifCount}
-        onOpenNotifications={() => setShowNotificationsModal(true)}
-        onOpenProfile={() => setShowProfileModal(true)}
-        onSignIn={() => setShowAuthModal(true)}
-        onOpenMyAds={() => setShowMyAdsModal(true)}
-        onOpenDailyBonus={() => setShowDailyBonusModal(true)}
-        onOpenAdmin={() => setActiveTab('admin')}
-      />
+      {/* Top Header - Hidden in dedicated Admin Console */}
+      {activeTab !== 'admin' && (
+        <Header
+          profile={profile}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          pendingCount={pendingClaimsCount}
+          unreadNotifCount={unreadNotifCount}
+          onOpenNotifications={() => setShowNotificationsModal(true)}
+          onOpenProfile={() => setShowProfileModal(true)}
+          onSignIn={() => setShowAuthModal(true)}
+          onOpenMyAds={() => setShowMyAdsModal(true)}
+          onOpenDailyBonus={() => setShowDailyBonusModal(true)}
+          onOpenAdmin={() => setActiveTab('admin')}
+        />
+      )}
 
       {/* Main Content Viewport */}
-      <main className={`flex-1 w-full ${activeTab === 'admin' ? 'max-w-full' : 'max-w-md md:max-w-4xl lg:max-w-6xl mx-auto'} relative`}>
+      <main className={`flex-1 w-full ${activeTab === 'admin' ? 'max-w-full p-0' : 'max-w-md md:max-w-4xl lg:max-w-6xl mx-auto'} relative`}>
         
         {/* Auth Toast Warning if any */}
         {authError && (
