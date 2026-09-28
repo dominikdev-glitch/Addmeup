@@ -55,10 +55,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // If no account is detected, open register box straight or Google signup!
   const [hasBrowserAccount, setHasBrowserAccount] = useState<boolean>(() => detectHasAccount());
 
-  const [authMode, setAuthMode] = useState<'google' | 'email_login' | 'email_register' | 'forgot_password'>(() => {
-    const hasAccount = detectHasAccount();
-    return hasAccount ? 'email_login' : 'email_register';
-  });
+  const [authMode, setAuthMode] = useState<'google' | 'email_login' | 'email_register' | 'forgot_password'>('google');
 
   const [savedEmail] = useState<string>(() => {
     try {
@@ -686,10 +683,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         )}
 
-        {/* Footer Guarantee */}
-        <div className="pt-3 mt-3 border-t border-slate-200/60 text-[10px] text-slate-500 font-medium flex items-center justify-center gap-1">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Encrypted Authentication • Your data is protected</span>
+        {/* Footer Guarantee & Legal Links */}
+        <div className="pt-3 mt-3 border-t border-slate-200/60 text-[10px] text-slate-500 font-medium space-y-1.5">
+          <div className="flex items-center justify-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Encrypted Google & Firebase Authentication</span>
+          </div>
+          <p className="text-[10px] text-slate-400">
+            By continuing, you agree to our{' '}
+            <a href="/terms" className="text-slate-600 hover:text-orange-600 font-bold underline">
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a href="/privacy" className="text-slate-600 hover:text-orange-600 font-bold underline">
+              Privacy Policy
+            </a>
+            .
+          </p>
         </div>
 
       </div>

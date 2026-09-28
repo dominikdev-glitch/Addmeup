@@ -14,6 +14,7 @@ import { DailyBonusModal } from './components/DailyBonusModal';
 import { BoostModal } from './components/BoostModal';
 import { AuthModal } from './components/AuthModal';
 import { AdminPage } from './components/AdminPage';
+import { LegalPage } from './components/LegalPage';
 import { MobileInstallPrompt } from './components/MobileInstallPrompt';
 import { Logo } from './components/Logo';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
@@ -37,6 +38,51 @@ export default function App() {
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'feed' | 'post' | 'verifications' | 'wallet' | 'transactions' | 'admin'>('feed');
+  const [legalPage, setLegalPage] = useState<'privacy' | 'terms' | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = new URLSearchParams(window.location.search).get('page')?.toLowerCase();
+    if (path === '/privacy' || path === '/privacy-policy' || hash === '#/privacy' || search === 'privacy') {
+      return 'privacy';
+    }
+    if (path === '/terms' || path === '/terms-of-service' || hash === '#/terms' || search === 'terms') {
+      return 'terms';
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    const syncLegalRoute = () => {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      const search = new URLSearchParams(window.location.search).get('page')?.toLowerCase();
+      if (path === '/privacy' || path === '/privacy-policy' || hash === '#/privacy' || search === 'privacy') {
+        setLegalPage('privacy');
+      } else if (path === '/terms' || path === '/terms-of-service' || hash === '#/terms' || search === 'terms') {
+        setLegalPage('terms');
+      } else {
+        setLegalPage(null);
+      }
+    };
+    window.addEventListener('popstate', syncLegalRoute);
+    window.addEventListener('hashchange', syncLegalRoute);
+    return () => {
+      window.removeEventListener('popstate', syncLegalRoute);
+      window.removeEventListener('hashchange', syncLegalRoute);
+    };
+  }, []);
+
+  const navigateLegal = (target: 'home' | 'privacy' | 'terms') => {
+    if (target === 'home') {
+      window.history.pushState({}, '', '/');
+      setLegalPage(null);
+    } else {
+      window.history.pushState({}, '', `/${target}`);
+      setLegalPage(target);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [showMyAdsModal, setShowMyAdsModal] = useState(false);
@@ -168,6 +214,11 @@ export default function App() {
     }, 4000);
   };
 
+  // Render Public Legal Pages (/privacy & /terms) immediately without requiring login
+  if (legalPage) {
+    return <LegalPage page={legalPage} onNavigate={navigateLegal} />;
+  }
+
   // If initial auth is still checking
   if (loading) {
     return (
@@ -190,6 +241,8 @@ export default function App() {
         <LandingPage
           onSignInGoogle={signInWithGoogle}
           onOpenAuthModal={() => setShowAuthModal(true)}
+          onOpenPrivacy={() => navigateLegal('privacy')}
+          onOpenTerms={() => navigateLegal('terms')}
         />
 
         {/* Auth Modal */}

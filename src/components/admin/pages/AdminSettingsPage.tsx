@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Settings, 
   Coins, 
@@ -7,14 +7,126 @@ import {
   ShieldAlert, 
   Gift, 
   CheckCircle2, 
-  Database,
-  Lock,
+  ExternalLink,
+  Copy,
+  Check,
+  KeyRound,
   Zap
 } from 'lucide-react';
 
 export const AdminSettingsPage: React.FC = () => {
+  const [copiedDomain, setCopiedDomain] = useState<string | null>(null);
+
+  const copyText = (text: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedDomain(text);
+    setTimeout(() => setCopiedDomain(null), 2500);
+  };
+
+  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'ais-dev-vstm4wlpu75m6g23r5gqkz-72984926906.europe-west2.run.app';
+  const sharedDomain = 'ais-pre-vstm4wlpu75m6g23r5gqkz-72984926906.europe-west2.run.app';
+
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl">
+      {/* Google Authentication & Firebase Console Setup */}
+      <div className="bg-slate-900 border border-orange-500/30 rounded-3xl p-6 sm:p-7 space-y-5 shadow-lg shadow-orange-500/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-bold">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white">Google Authentication Setup (Firebase Console)</h3>
+              <p className="text-xs text-slate-400">
+                Direct links & domain configuration for Firebase Project <span className="text-orange-400 font-mono font-bold">addmeup-95897</span>
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-black w-fit">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>SDK Wired & Ready</span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Step 1: Enable Google Sign-In Provider */}
+          <div className="bg-slate-950/90 p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between">
+            <div className="space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded-md inline-block">
+                Step 1 • Enable Google Provider
+              </span>
+              <h4 className="text-sm font-black text-white">Turn On Google Sign-In in Firebase</h4>
+              <ol className="text-xs text-slate-400 space-y-1.5 list-decimal list-inside leading-relaxed">
+                <li>Click the button below to open your Firebase Sign-in Providers page.</li>
+                <li>Click <strong className="text-slate-200">Add new provider</strong> (or select <strong className="text-slate-200">Google</strong>).</li>
+                <li>Toggle <strong className="text-emerald-400">Enable</strong> on and pick your project support email (<code className="text-slate-200">heisgag1@gmail.com</code>).</li>
+                <li>Click <strong className="text-slate-200">Save</strong>.</li>
+              </ol>
+            </div>
+
+            <a
+              href="https://console.firebase.google.com/project/addmeup-95897/authentication/providers"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <span>1. Open Firebase Sign-In Providers</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+
+          {/* Step 2: Add Authorized Domains */}
+          <div className="bg-slate-950/90 p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between">
+            <div className="space-y-2.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md inline-block">
+                Step 2 • Authorize App Domains
+              </span>
+              <h4 className="text-sm font-black text-white">Whitelist Your App URLs for Google Popup</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                In <strong className="text-slate-200">Authentication → Settings → Authorized domains</strong>, click <strong className="text-slate-200">Add domain</strong> and paste these domains:
+              </p>
+
+              {/* Copyable Domain 1 */}
+              <div className="flex items-center justify-between gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800">
+                <code className="text-[11px] font-mono text-amber-300 truncate">{currentDomain}</code>
+                <button
+                  type="button"
+                  onClick={() => copyText(currentDomain)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1 flex-shrink-0"
+                >
+                  {copiedDomain === currentDomain ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedDomain === currentDomain ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+
+              {/* Copyable Domain 2 */}
+              {currentDomain !== sharedDomain && (
+                <div className="flex items-center justify-between gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800">
+                  <code className="text-[11px] font-mono text-emerald-300 truncate">{sharedDomain}</code>
+                  <button
+                    type="button"
+                    onClick={() => copyText(sharedDomain)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white flex items-center gap-1 flex-shrink-0"
+                  >
+                    {copiedDomain === sharedDomain ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedDomain === sharedDomain ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <a
+              href="https://console.firebase.google.com/project/addmeup-95897/authentication/settings"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-md"
+            >
+              <span>2. Open Firebase Authorized Domains</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      </div>
       {/* Economic Parameters Card */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 space-y-5">
         <div className="flex items-center gap-3">
