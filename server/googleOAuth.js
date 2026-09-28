@@ -1,5 +1,5 @@
 /**
- * Native Google OAuth 2.0 Helper for Custom Domain Branding (e.g., https://addmeup.ng)
+ * Native Google OAuth 2.0 Helper for Custom Domain Branding (https://addmeup.ng)
  *
  * Reads the downloaded Google Cloud Console OAuth 2.0 Client JSON from:
  * - process.env.GOOGLE_OAUTH_JSON
@@ -13,8 +13,7 @@
 export function getGoogleOAuthConfig() {
   let clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '').trim();
   let clientSecret = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
-  let configuredRedirectUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
-  let allRedirectUris = [];
+  const explicitRedirectUri = (process.env.GOOGLE_REDIRECT_URI || '').trim();
 
   const candidateJsonStrings = [
     process.env.GOOGLE_OAUTH_JSON,
@@ -43,21 +42,6 @@ export function getGoogleOAuthConfig() {
       if (block && block.client_id && block.client_secret && parsed.type !== 'service_account') {
         clientId = block.client_id;
         clientSecret = block.client_secret;
-        if (Array.isArray(block.redirect_uris) && block.redirect_uris.length > 0) {
-          allRedirectUris = block.redirect_uris;
-          if (!configuredRedirectUri) {
-            // 1. Prefer exact callback route on addmeup.ng if registered in JSON
-            const exactCallbackUri = block.redirect_uris.find(
-              (u) => u.includes('addmeup.ng') && u.includes('/api/auth/google/callback')
-            );
-            // 2. Otherwise prefer ANY URI on addmeup.ng registered in the downloaded JSON
-            const anyDomainUri = block.redirect_uris.find((u) => u.includes('addmeup.ng'));
-            // 3. Otherwise prefer any https URI registered in the downloaded JSON
-            const anyHttpsUri = block.redirect_uris.find((u) => u.startsWith('https://'));
-
-            configuredRedirectUri = exactCallbackUri || anyDomainUri || anyHttpsUri || block.redirect_uris[0];
-          }
-        }
       }
     } catch {
       // Ignore parse errors on non-matching env vars
@@ -68,35 +52,30 @@ export function getGoogleOAuthConfig() {
     isConfigured: Boolean(clientId && clientSecret),
     clientId,
     clientSecret,
-    configuredRedirectUri,
-    allRedirectUris,
+    explicitRedirectUri,
   };
 }
 
 /**
- * Resolves the active redirect_uri based on the incoming request host
- * or the exact redirect_uris array inside GOOGLE_OAUTH_JSON.
+ * Resolves the exact Authorized Redirect URI registered in Google Cloud Console:
+ * - https://www.addmeup.ng/api/auth/google/callback (when on www.addmeup.ng)
+ * - https://addmeup.ng/api/auth/google/callback (default for addmeup.ng)
  */
 export function resolveRedirectUri(req) {
   const config = getGoogleOAuthConfig();
-  const host = req.headers['x-forwarded-host']?.split(',')[0]?.trim() || req.get('host') || 'addmeup.ng';
-  const isLocal = host.startsWith('localhost') || host.startsWith('127.0.0.1');
-  const proto = isLocal ? 'http' : 'https';
-
-  // If the JSON had redirect_uris registered, check if one matches the current host
-  if (Array.isArray(config.allRedirectUris) && config.allRedirectUris.length > 0) {
-    const matchingHostCallback = config.allRedirectUris.find(
-      (u) => u.includes(host) && u.includes('/api/auth/google/callback')
-    );
-    if (matchingHostCallback) return matchingHostCallback;
-
-    const matchingHostAny = config.allRedirectUris.find((u) => u.includes(host));
-    if (matchingHostAny) return matchingHostAny;
+  if (config.explicitRedirectUri) {
+    return config.explicitRedirectUri;
   }
 
-  if (config.configuredRedirectUri) {
-    return config.configuredRedirectUri;
+  const host = (
+    req.headers['x-forwarded-host']?.split(',')[0]?.trim() ||
+    req.get('host') ||
+    'addmeup.ng'
+  ).toLowerCase();
+
+  if (host === 'www.addmeup.ng') {
+    return 'https://www.addmeup.ng/api/auth/google/callback';
   }
 
-  return `${proto}://${host}/api/auth/google/callback`;
+  return 'https://addmeup.ng/api/auth/google/callback';
 }

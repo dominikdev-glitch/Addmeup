@@ -3,18 +3,9 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import firebaseConfigData from '../../firebase-applet-config.json';
 
-// If running on custom domain (e.g. addmeup.ng), use that domain as authDomain
-// since server.js proxies /__/auth/* directly to Firebase
-const resolvedAuthDomain =
-  typeof window !== 'undefined' &&
-  window.location.hostname &&
-  window.location.hostname.includes('addmeup.ng')
-    ? window.location.hostname
-    : firebaseConfigData.authDomain;
-
 const firebaseConfig = {
   apiKey: firebaseConfigData.apiKey,
-  authDomain: resolvedAuthDomain,
+  authDomain: firebaseConfigData.authDomain,
   projectId: firebaseConfigData.projectId,
   storageBucket: firebaseConfigData.storageBucket,
   messagingSenderId: firebaseConfigData.messagingSenderId,
