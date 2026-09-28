@@ -1,4 +1,4 @@
-const CACHE_NAME = 'addup-pwa-v3';
+const CACHE_NAME = 'addup-pwa-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -38,6 +38,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/__/auth/')) {
+    return;
+  }
   // Network first strategy
   event.respondWith(
     fetch(event.request).catch(() => {

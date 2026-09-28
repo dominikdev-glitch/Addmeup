@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 let db = null;
 let isInitialized = false;
@@ -13,20 +14,27 @@ let isInitialized = false;
  * - Individual vars: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
  */
 export function getFirebaseAdmin() {
-  if (isInitialized) {
-    return { admin, db, isConfigured: true };
+  if (isInitialized && db) {
+    return { db, isConfigured: true };
   }
 
-  const rawJson = 
-    process.env.FIREBASE_ADMIN_JSON || 
-    process.env.FIREBASE_SERVICE_ACCOUNT || 
+  const rawJson =
+    process.env.FIREBASE_ADMIN_JSON ||
+    process.env.FIREBASE_SERVICE_ACCOUNT ||
     process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
     process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
 
   let serviceAccount = null;
 
   if (rawJson && typeof rawJson === 'string') {
-    const trimmed = rawJson.trim();
+    let trimmed = rawJson.trim();
+    if (
+      (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+      (trimmed.startsWith('"') && trimmed.endsWith('"'))
+    ) {
+      trimmed = trimmed.slice(1, -1).trim();
+    }
+
     // 1. Try direct JSON parse
     try {
       serviceAccount = JSON.parse(trimmed);
@@ -50,27 +58,43 @@ export function getFirebaseAdmin() {
     };
   }
 
+  // Check if user pasted an OAuth 2.0 Web Client JSON instead of a Service Account JSON
+  if (serviceAccount && (serviceAccount.web || serviceAccount.installed || serviceAccount.client_secret)) {
+    console.log(
+      'ℹ️ [Firebase Admin] Detected Google OAuth 2.0 Client JSON in FIREBASE_ADMIN_JSON. Using it for Native Google Sign-In (addmeup.ng).'
+    );
+    return { db: null, isConfigured: false };
+  }
+
   if (serviceAccount && (serviceAccount.private_key || serviceAccount.privateKey)) {
     try {
-      if (!admin.apps.length) {
-        admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId: serviceAccount.project_id || serviceAccount.projectId || 'addmeup-95897',
-            clientEmail: serviceAccount.client_email || serviceAccount.clientEmail,
-            privateKey: (serviceAccount.private_key || serviceAccount.privateKey).replace(/\\n/g, '\n'),
-          }),
-        });
-      }
-      db = admin.firestore();
+      const existingApps = getApps();
+      const app =
+        existingApps.length === 0
+          ? initializeApp({
+              credential: cert({
+                projectId: serviceAccount.project_id || serviceAccount.projectId || 'addmeup-95897',
+                clientEmail: serviceAccount.client_email || serviceAccount.clientEmail,
+                privateKey: String(serviceAccount.private_key || serviceAccount.privateKey).replace(/\\n/g, '\n'),
+              }),
+            })
+          : getApp();
+
+      db = getFirestore(app);
       isInitialized = true;
-      console.log('[Firebase Admin] Successfully initialized with project:', serviceAccount.project_id || serviceAccount.projectId);
-      return { admin, db, isConfigured: true };
+      console.log(
+        '✅ [Firebase Admin] Successfully initialized with project:',
+        serviceAccount.project_id || serviceAccount.projectId || 'addmeup-95897'
+      );
+      return { db, isConfigured: true };
     } catch (err) {
       console.error('[Firebase Admin] Error initializing Admin SDK:', err.message);
-      return { admin: null, db: null, isConfigured: false, error: err.message };
+      return { db: null, isConfigured: false, error: err.message };
     }
   }
 
-  console.warn('[Firebase Admin] No service account key found in environment (FIREBASE_ADMIN_JSON). Server running in verification-only mode.');
-  return { admin: null, db: null, isConfigured: false };
+  console.warn(
+    '[Firebase Admin] No service account key found in environment (FIREBASE_ADMIN_JSON). Server running in verification-only mode.'
+  );
+  return { db: null, isConfigured: false };
 }

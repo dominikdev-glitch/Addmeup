@@ -4,6 +4,8 @@ import {
   signInWithPopup, 
   signInWithRedirect,
   getRedirectResult,
+  signInWithCredential,
+  GoogleAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
@@ -36,8 +38,39 @@ export function useAuth() {
     }
   }, []);
 
-  // Check for redirect result on app load
+  // Check for redirect result or Native Google OAuth callback tokens on app load
   useEffect(() => {
+    const consumeNativeOAuthTokens = async (idToken?: string | null, accessToken?: string | null) => {
+      if (!idToken && !accessToken) return;
+      try {
+        // Try idToken + accessToken first; fall back to accessToken if OAuth client belongs to a separate GCP project
+        const primaryCred = GoogleAuthProvider.credential(idToken || null, accessToken || undefined);
+        await signInWithCredential(auth, primaryCred);
+      } catch (credErr: any) {
+        if (accessToken) {
+          try {
+            const fallbackCred = GoogleAuthProvider.credential(null, accessToken);
+            await signInWithCredential(auth, fallbackCred);
+          } catch (innerErr) {
+            console.warn("Native Google OAuth credential exchange notice:", innerErr);
+          }
+        }
+      }
+    };
+
+    try {
+      const storedTokens = localStorage.getItem('addmeup_google_oauth_tokens');
+      if (storedTokens) {
+        localStorage.removeItem('addmeup_google_oauth_tokens');
+        const parsed = JSON.parse(storedTokens);
+        if (parsed && (parsed.idToken || parsed.accessToken)) {
+          consumeNativeOAuthTokens(parsed.idToken, parsed.accessToken);
+        }
+      }
+    } catch (e) {
+      // Ignore storage errors
+    }
+
     getRedirectResult(auth).catch((err: any) => {
       if (err?.code !== 'auth/popup-closed-by-user') {
         console.warn("Redirect sign-in check:", err);
@@ -187,6 +220,80 @@ export function useAuth() {
   const signInWithGoogle = async () => {
     try {
       setError(null);
+
+      // 1. Check if Native Google Console OAuth (GOOGLE_OAUTH_JSON) is configured on the server
+      // so the Google login screen carries our custom domain (addmeup.ng) instead of firebaseapp.com
+      try {
+        const cfgRes = await fetch('/api/auth/google/config');
+        if (cfgRes.ok) {
+          const cfg = await cfgRes.json();
+          if (cfg && cfg.configured) {
+            return await new Promise((resolve, reject) => {
+              const width = 500;
+              const height = 620;
+              const left = window.screenX + (window.outerWidth - width) / 2;
+              const top = window.screenY + (window.outerHeight - height) / 2;
+
+              const popup = window.open(
+                '/api/auth/google/start',
+                'AddMeUpGoogleAuth',
+                `width=${width},height=${height},left=${left},top=${top},status=no,menubar=no,toolbar=no`
+              );
+
+              if (!popup) {
+                // Popup blocked (e.g. mobile in-app browser) -> use full-page redirect
+                window.location.href = '/api/auth/google/start';
+                return;
+              }
+
+              const handleMessage = async (event: MessageEvent) => {
+                if (!event.data || typeof event.data !== 'object') return;
+                if (event.data.type === 'ADDMEUP_GOOGLE_OAUTH_SUCCESS') {
+                  window.removeEventListener('message', handleMessage);
+                  clearInterval(closeTimer);
+                  localStorage.removeItem('addmeup_google_oauth_tokens');
+                  try {
+                    const { idToken, accessToken } = event.data;
+                    try {
+                      const cred = GoogleAuthProvider.credential(idToken || null, accessToken || undefined);
+                      const res = await signInWithCredential(auth, cred);
+                      resolve(res);
+                    } catch {
+                      const fallbackCred = GoogleAuthProvider.credential(null, accessToken);
+                      const res = await signInWithCredential(auth, fallbackCred);
+                      resolve(res);
+                    }
+                  } catch (signErr: any) {
+                    const msg = signErr.message || 'Failed to complete Google sign-in.';
+                    setError(msg);
+                    reject(new Error(msg));
+                  }
+                } else if (event.data.type === 'ADDMEUP_GOOGLE_OAUTH_ERROR') {
+                  window.removeEventListener('message', handleMessage);
+                  clearInterval(closeTimer);
+                  const msg = event.data.error || 'Google sign-in was cancelled.';
+                  setError(msg);
+                  reject(new Error(msg));
+                }
+              };
+
+              window.addEventListener('message', handleMessage);
+
+              const closeTimer = setInterval(() => {
+                if (popup.closed) {
+                  clearInterval(closeTimer);
+                  window.removeEventListener('message', handleMessage);
+                  resolve(undefined);
+                }
+              }, 600);
+            });
+          }
+        }
+      } catch {
+        // Server endpoint unreachable or unconfigured, proceed to standard Firebase Google popup
+      }
+
+      // 2. Standard Firebase Google Sign-In fallback
       const result = await signInWithPopup(auth, googleProvider);
       return result;
     } catch (err: any) {

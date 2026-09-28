@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getFirebaseAdmin } from './server/firebaseAdmin.js';
+import { getGoogleOAuthConfig, resolveRedirectUri } from './server/googleOAuth.js';
 import { 
   verifyPaystackTransaction, 
   verifyPaystackSignature, 
@@ -25,6 +26,11 @@ if (adminInfo.isConfigured) {
   console.log('ℹ️ [Server] Firebase Admin SDK not configured in env (FIREBASE_ADMIN_JSON). Running in verification fallback mode.');
 }
 
+const oauthInfo = getGoogleOAuthConfig();
+if (oauthInfo.isConfigured) {
+  console.log('✅ [Server] Native Google OAuth 2.0 active (Custom domain sign-in enabled for addmeup.ng)');
+}
+
 // Preserve raw body buffer for Paystack Webhook HMAC verification
 app.use(
   express.json({
@@ -37,12 +43,153 @@ app.use(
 // Health check endpoint (for Render / uptime monitors)
 app.get('/api/health', (_req, res) => {
   const activeSecretKey = (process.env.PAYSTACK_SECRET_KEY || PAYSTACK_SECRET_KEY || '').trim();
+  const googleOAuth = getGoogleOAuthConfig();
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     firebaseAdmin: getFirebaseAdmin().isConfigured,
     hasPaystackSecret: Boolean(activeSecretKey),
+    nativeGoogleOAuth: googleOAuth.isConfigured,
   });
+});
+
+// ============================================================================
+// NATIVE GOOGLE OAUTH 2.0 (Custom Domain Branding e.g. addmeup.ng)
+// ============================================================================
+
+app.get('/api/auth/google/config', (req, res) => {
+  const config = getGoogleOAuthConfig();
+  res.json({
+    configured: config.isConfigured,
+    clientId: config.clientId || null,
+    redirectUri: resolveRedirectUri(req),
+  });
+});
+
+app.get('/api/auth/google/start', (req, res) => {
+  const config = getGoogleOAuthConfig();
+  if (!config.isConfigured) {
+    return res.status(400).send('GOOGLE_OAUTH_JSON is not configured on the server.');
+  }
+
+  const redirectUri = resolveRedirectUri(req);
+  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authUrl.searchParams.set('client_id', config.clientId);
+  authUrl.searchParams.set('redirect_uri', redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', 'openid email profile');
+  authUrl.searchParams.set('prompt', 'select_account');
+  authUrl.searchParams.set('access_type', 'online');
+
+  res.redirect(authUrl.toString());
+});
+
+app.get('/api/auth/google/callback', async (req, res) => {
+  const { code, error } = req.query;
+  const config = getGoogleOAuthConfig();
+  const redirectUri = resolveRedirectUri(req);
+
+  if (error || !code || !config.isConfigured) {
+    const errMsg = error || 'Google authentication was cancelled or unconfigured.';
+    return res.type('text/html').send(`<!DOCTYPE html>
+<html><head><title>Sign In Notice</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;">
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: ${JSON.stringify(String(errMsg))} }, '*');
+      window.close();
+    } else {
+      window.location.replace('/');
+    }
+  </script>
+  <p>Returning to AddMeUp...</p>
+</body></html>`);
+  }
+
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+
+    const tokenData = await tokenRes.json();
+
+    if (!tokenRes.ok || (!tokenData.id_token && !tokenData.access_token)) {
+      const errDetail = tokenData.error_description || tokenData.error || 'Failed to exchange Google OAuth code.';
+      console.error('[Google OAuth Callback] Token exchange error:', tokenData);
+      return res.type('text/html').send(`<!DOCTYPE html>
+<html><head><title>Sign In Error</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;">
+  <script>
+    if (window.opener) {
+      window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: ${JSON.stringify(errDetail)} }, '*');
+      window.close();
+    } else {
+      window.location.replace('/');
+    }
+  </script>
+</body></html>`);
+    }
+
+    const payload = {
+      type: 'ADDMEUP_GOOGLE_OAUTH_SUCCESS',
+      idToken: tokenData.id_token || null,
+      accessToken: tokenData.access_token || null,
+      ts: Date.now(),
+    };
+
+    return res.type('text/html').send(`<!DOCTYPE html>
+<html><head><title>Signing in to AddMeUp...</title></head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#fffaf0;color:#1e293b;">
+  <h3>Completing Google Sign-In...</h3>
+  <script>
+    try {
+      const data = ${JSON.stringify(payload)};
+      localStorage.setItem('addmeup_google_oauth_tokens', JSON.stringify(data));
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(data, '*');
+        window.close();
+      } else {
+        window.location.replace('/');
+      }
+    } catch (e) {
+      window.location.replace('/');
+    }
+  </script>
+</body></html>`);
+  } catch (err) {
+    console.error('[Google OAuth Callback] Unexpected error:', err);
+    res.redirect('/');
+  }
+});
+
+// Proxy /__/auth/* to Firebase Auth handler so custom authDomain (addmeup.ng) works seamlessly
+app.all('/__/auth/*', async (req, res) => {
+  try {
+    const targetUrl = `https://addmeup-95897.firebaseapp.com${req.originalUrl}`;
+    const response = await fetch(targetUrl, {
+      method: req.method,
+      headers: {
+        'User-Agent': req.get('user-agent') || 'Mozilla/5.0',
+        'Accept': req.get('accept') || '*/*',
+      },
+    });
+    res.status(response.status);
+    const contentType = response.headers.get('content-type');
+    if (contentType) res.setHeader('Content-Type', contentType);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.send(buffer);
+  } catch (err) {
+    console.error('[Firebase Auth Proxy] Error:', err);
+    res.status(502).send('Auth proxy error');
+  }
 });
 
 // Paystack Public Configuration endpoint

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
 
 export const PAYSTACK_SECRET_KEY = 
@@ -65,7 +66,7 @@ export async function creditUserDeposit({
   paymentMethod = 'Paystack',
   paystackData = null,
 }) {
-  const { admin, db, isConfigured } = getFirebaseAdmin();
+  const { db, isConfigured } = getFirebaseAdmin();
 
   if (!isConfigured || !db) {
     return {
@@ -100,8 +101,8 @@ export async function creditUserDeposit({
   batch.set(
     userRef,
     {
-      creditBalance: admin.firestore.FieldValue.increment(credits),
-      lastDepositAt: admin.firestore.FieldValue.serverTimestamp(),
+      creditBalance: FieldValue.increment(credits),
+      lastDepositAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
   );
@@ -121,7 +122,7 @@ export async function creditUserDeposit({
     currency: paystackData?.currency || 'NGN',
     description: `Deposited ₦${Number(amountNgn).toLocaleString('en-NG')} (+${credits} Points via ${paymentMethod})`,
     verifiedAt: new Date().toISOString(),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    createdAt: FieldValue.serverTimestamp(),
   });
 
   // 4. Create user notification
