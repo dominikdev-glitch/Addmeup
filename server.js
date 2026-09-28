@@ -193,6 +193,11 @@ app.post('/api/paystack/webhook', async (req, res) => {
   res.sendStatus(200);
 });
 
+// Google Search Console verification file route
+app.get('/google7b85a384a73f8c2a.html', (_req, res) => {
+  res.type('text/html').send('google-site-verification: google7b85a384a73f8c2a.html');
+});
+
 // Serve static assets from the dist directory
 app.use(express.static(path.join(__dirname, 'dist')));
 

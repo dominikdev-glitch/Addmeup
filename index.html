@@ -37,7 +37,26 @@
     <script src="https://js.paystack.co/v1/inline.js"></script>
   </head>
   <body class="bg-[#fffaf0] text-slate-800 min-h-screen antialiased selection:bg-orange-500 selection:text-white font-['Plus_Jakarta_Sans',sans-serif]">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static fallback for Google OAuth Brand Verification & Search Engine Crawlers (Replaced automatically when React mounts) -->
+      <main style="max-width: 800px; margin: 0 auto; padding: 40px 20px; font-family: sans-serif; color: #1e293b;">
+        <h1>AddMeUp — Social Handle Exchange Platform for Snapchat &amp; WhatsApp</h1>
+        <p>
+          AddMeUp is a social discovery and handle exchange platform where everyday users, creators, and businesses share their Snapchat handles and WhatsApp numbers to grow their audience, earn promotional points, and connect with real community members.
+        </p>
+        <h2>How AddMeUp Uses Google Sign-In Data</h2>
+        <p>
+          AddMeUp uses Google Sign-In (OAuth 2.0) solely to authenticate your account identity, retrieve your basic profile (name, email address, and profile photo), and secure your promotional points wallet. We never sell or share your personal data with third parties.
+        </p>
+        <footer style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+          <a href="https://addmeup.ng/privacy">Privacy Policy</a> |
+          <a href="/privacy">Privacy Policy (Direct)</a> |
+          <a href="https://addmeup.ng/terms">Terms of Service</a> |
+          <a href="/terms">Terms of Service (Direct)</a> |
+          <a href="mailto:heisgag1@gmail.com">Contact Support (heisgag1@gmail.com)</a>
+        </footer>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {

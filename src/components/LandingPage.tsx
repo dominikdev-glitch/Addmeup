@@ -312,6 +312,46 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </section>
 
+        {/* TRANSPARENCY & DATA PRIVACY SECTION (Required for Google OAuth Brand Verification) */}
+        <section className="bg-white/90 border border-slate-200/80 rounded-3xl p-6 shadow-2xs space-y-3 text-left max-w-4xl mx-auto">
+          <div className="flex items-center gap-2 text-emerald-700 font-black text-xs uppercase tracking-wider">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Data Transparency & Google Sign-In Privacy</span>
+          </div>
+          <h2 className="text-base sm:text-lg font-black text-slate-900">
+            Why AddMeUp Requests Basic Account Information
+          </h2>
+          <p className="text-xs text-slate-600 font-medium leading-relaxed">
+            When you sign in to <strong>AddMeUp</strong> using Google Sign-In, we only request your basic profile information (your name, email address, and profile picture) to create your unique account, credit your promotional points wallet, and display your chosen name on handles you voluntarily share. We never access private Google files or contacts, and we never sell your personal data. Read our full{' '}
+            <a
+              href="https://addmeup.ng/privacy"
+              onClick={(e) => {
+                if (onOpenPrivacy) {
+                  e.preventDefault();
+                  onOpenPrivacy();
+                }
+              }}
+              className="text-orange-600 font-extrabold underline"
+            >
+              Privacy Policy
+            </a>{' '}
+            and{' '}
+            <a
+              href="https://addmeup.ng/terms"
+              onClick={(e) => {
+                if (onOpenTerms) {
+                  e.preventDefault();
+                  onOpenTerms();
+                }
+              }}
+              className="text-orange-600 font-extrabold underline"
+            >
+              Terms of Service
+            </a>{' '}
+            for complete details.
+          </p>
+        </section>
+
         {/* BOTTOM FINAL CTA */}
         <section className="bg-slate-900 text-white rounded-3xl p-6 sm:p-10 shadow-2xl text-center space-y-5 relative overflow-hidden">
           <div className="max-w-xl mx-auto space-y-2 relative z-10">
@@ -339,7 +379,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       <footer className="border-t border-slate-200/80 bg-white/40 py-6 text-center text-xs text-slate-500 font-medium space-y-2">
         <div className="flex items-center justify-center gap-4 text-xs font-bold text-slate-700">
           <a
-            href="/privacy"
+            href="https://addmeup.ng/privacy"
             onClick={(e) => {
               if (onOpenPrivacy) {
                 e.preventDefault();
@@ -352,7 +392,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </a>
           <span className="text-slate-300">•</span>
           <a
-            href="/terms"
+            href="https://addmeup.ng/terms"
             onClick={(e) => {
               if (onOpenTerms) {
                 e.preventDefault();
@@ -371,7 +411,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Contact Support
           </a>
         </div>
-        <p>AddMeUp © {new Date().getFullYear()} • Social Handle Exchange Platform</p>
+        <p>AddMeUp © {new Date().getFullYear()} • Social Handle Exchange Platform (addmeup.ng)</p>
         <p className="text-[11px] text-slate-400">Snapchat and WhatsApp are trademarks of their respective owners.</p>
       </footer>
 
