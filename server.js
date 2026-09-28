@@ -16,6 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
 // Initialize Firebase Admin at startup if configured in env
@@ -84,7 +85,7 @@ app.get('/api/auth/google/start', (req, res) => {
   res.redirect(authUrl.toString());
 });
 
-app.get('/api/auth/google/callback', async (req, res) => {
+async function handleGoogleOAuthCallback(req, res) {
   const { code, error } = req.query;
   const config = getGoogleOAuthConfig();
   const redirectUri = resolveRedirectUri(req);
@@ -168,6 +169,21 @@ app.get('/api/auth/google/callback', async (req, res) => {
     console.error('[Google OAuth Callback] Unexpected error:', err);
     res.redirect('/');
   }
+}
+
+app.get('/api/auth/google/callback', handleGoogleOAuthCallback);
+
+// Also catch Google OAuth callback if user configured root "/" or "/callback" or "/auth/google/callback" in Google Console
+app.use((req, res, next) => {
+  if (
+    req.method === 'GET' &&
+    req.query.code &&
+    typeof req.query.scope === 'string' &&
+    (req.query.scope.includes('email') || req.query.scope.includes('profile') || req.query.scope.includes('openid'))
+  ) {
+    return handleGoogleOAuthCallback(req, res);
+  }
+  next();
 });
 
 // Proxy /__/auth/* to Firebase Auth handler so custom authDomain (addmeup.ng) works seamlessly
