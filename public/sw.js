@@ -1,4 +1,4 @@
-const CACHE_NAME = 'addup-pwa-v4';
+const CACHE_NAME = 'addup-pwa-v6';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

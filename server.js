@@ -55,32 +55,31 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ============================================================================
-// NATIVE GOOGLE OAUTH 2.0 (Custom Domain Branding e.g. addmeup.ng)
+// NATIVE GOOGLE OAUTH 2.0 (Pure Google Console Auth for addmeup.ng)
 // ============================================================================
 
 app.get('/api/auth/google/config', (req, res) => {
   const config = getGoogleOAuthConfig();
   res.json({
-    configured: config.isConfigured,
-    clientId: config.clientId || null,
+    configured: true,
+    clientId: config.clientId,
     redirectUri: resolveRedirectUri(req),
   });
 });
 
 app.get('/api/auth/google/start', (req, res) => {
   const config = getGoogleOAuthConfig();
-  if (!config.isConfigured) {
-    return res.status(400).send('GOOGLE_OAUTH_JSON is not configured on the server.');
-  }
-
   const redirectUri = resolveRedirectUri(req);
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   authUrl.searchParams.set('client_id', config.clientId);
   authUrl.searchParams.set('redirect_uri', redirectUri);
-  authUrl.searchParams.set('response_type', 'code');
+  // Use 'code' when clientSecret is configured, or 'token' so it works even without a server secret
+  authUrl.searchParams.set('response_type', config.clientSecret ? 'code' : 'token');
   authUrl.searchParams.set('scope', 'openid email profile');
   authUrl.searchParams.set('prompt', 'select_account');
-  authUrl.searchParams.set('access_type', 'online');
+  if (config.clientSecret) {
+    authUrl.searchParams.set('access_type', 'online');
+  }
 
   res.redirect(authUrl.toString());
 });
@@ -90,14 +89,13 @@ async function handleGoogleOAuthCallback(req, res) {
   const config = getGoogleOAuthConfig();
   const redirectUri = resolveRedirectUri(req);
 
-  if (error || !code || !config.isConfigured) {
-    const errMsg = error || 'Google authentication was cancelled or unconfigured.';
+  if (error) {
     return res.type('text/html').send(`<!DOCTYPE html>
 <html><head><title>Sign In Notice</title></head>
 <body style="font-family:sans-serif;text-align:center;padding:40px;">
   <script>
     if (window.opener) {
-      window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: ${JSON.stringify(String(errMsg))} }, '*');
+      window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: ${JSON.stringify(String(error))} }, '*');
       window.close();
     } else {
       window.location.replace('/');
@@ -107,53 +105,84 @@ async function handleGoogleOAuthCallback(req, res) {
 </body></html>`);
   }
 
-  try {
-    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code: String(code),
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        redirect_uri: redirectUri,
-        grant_type: 'authorization_code',
-      }).toString(),
-    });
+  // Case 1: Server-side authorization code exchange (when GOOGLE_OAUTH_JSON / clientSecret is present)
+  if (code && config.clientSecret) {
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code: String(code),
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          redirect_uri: redirectUri,
+          grant_type: 'authorization_code',
+        }).toString(),
+      });
 
-    const tokenData = await tokenRes.json();
+      const tokenData = await tokenRes.json();
 
-    if (!tokenRes.ok || (!tokenData.id_token && !tokenData.access_token)) {
-      const errDetail = tokenData.error_description || tokenData.error || 'Failed to exchange Google OAuth code.';
-      console.error('[Google OAuth Callback] Token exchange error:', tokenData);
-      return res.type('text/html').send(`<!DOCTYPE html>
-<html><head><title>Sign In Error</title></head>
-<body style="font-family:sans-serif;text-align:center;padding:40px;">
-  <script>
-    if (window.opener) {
-      window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: ${JSON.stringify(errDetail)} }, '*');
-      window.close();
-    } else {
-      window.location.replace('/');
-    }
-  </script>
-</body></html>`);
-    }
+      if (tokenRes.ok && tokenData.access_token) {
+        const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${tokenData.access_token}` },
+        });
+        const userInfo = await userRes.json();
 
-    const payload = {
-      type: 'ADDMEUP_GOOGLE_OAUTH_SUCCESS',
-      idToken: tokenData.id_token || null,
-      accessToken: tokenData.access_token || null,
-      ts: Date.now(),
-    };
+        if (userRes.ok && userInfo && (userInfo.sub || userInfo.email)) {
+          let resolvedUid = `google_${userInfo.sub || userInfo.email}`;
+          if (adminInfo.isConfigured && adminInfo.db && userInfo.email) {
+            try {
+              const emailLower = userInfo.email.trim().toLowerCase();
+              const snap = await adminInfo.db.collection('users').where('email', '==', emailLower).get();
+              if (!snap.empty) {
+                const nonGoogleDoc = snap.docs.find((d) => !d.id.startsWith('google_'));
+                resolvedUid = nonGoogleDoc ? nonGoogleDoc.id : snap.docs[0].id;
+              }
+            } catch (e) {
+              console.warn('[Server] Firestore email lookup note:', e);
+            }
+          }
 
-    return res.type('text/html').send(`<!DOCTYPE html>
+          const nativeUser = {
+            uid: resolvedUid,
+            sub: userInfo.sub || '',
+            email: userInfo.email || '',
+            displayName: userInfo.name || userInfo.given_name || (userInfo.email ? userInfo.email.split('@')[0] : 'User'),
+            photoURL: userInfo.picture || '',
+            accessToken: tokenData.access_token,
+            idToken: tokenData.id_token || null,
+            ts: Date.now(),
+          };
+
+          const payload = {
+            type: 'ADDMEUP_GOOGLE_OAUTH_SUCCESS',
+            user: nativeUser,
+            idToken: tokenData.id_token || null,
+            accessToken: tokenData.access_token || null,
+            ts: Date.now(),
+          };
+
+          return res.type('text/html').send(`<!DOCTYPE html>
 <html><head><title>Signing in to AddMeUp...</title></head>
 <body style="font-family:sans-serif;text-align:center;padding:40px;background:#fffaf0;color:#1e293b;">
   <h3>Completing Google Sign-In...</h3>
   <script>
     try {
       const data = ${JSON.stringify(payload)};
-      localStorage.setItem('addmeup_google_oauth_tokens', JSON.stringify(data));
+      localStorage.setItem('addmeup_native_google_user', JSON.stringify(data.user));
+      localStorage.setItem('addmeup_has_account', 'true');
+      if (data.idToken) {
+        localStorage.setItem('addmeup_google_id_token', data.idToken);
+      }
+      if (data.accessToken) {
+        localStorage.setItem('addmeup_google_access_token', data.accessToken);
+      }
+      if (data.user && data.user.uid && !data.user.uid.startsWith('google_')) {
+        localStorage.setItem('addmeup_linked_firebase_uid', data.user.uid);
+      }
+      if (data.user && data.user.email) {
+        localStorage.setItem('addmeup_saved_email', data.user.email);
+      }
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage(data, '*');
         window.close();
@@ -165,15 +194,110 @@ async function handleGoogleOAuthCallback(req, res) {
     }
   </script>
 </body></html>`);
-  } catch (err) {
-    console.error('[Google OAuth Callback] Unexpected error:', err);
-    res.redirect('/');
+        }
+      }
+    } catch (err) {
+      console.error('[Google OAuth Callback] Server code exchange notice:', err);
+    }
   }
+
+  // Case 2: Client-side hash token handling (#access_token=...) from Google OAuth 2.0
+  return res.type('text/html').send(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Signing in to AddMeUp...</title>
+</head>
+<body style="font-family:sans-serif;text-align:center;padding:40px;background:#fffaf0;color:#1e293b;">
+  <h3>Completing Google Sign-In...</h3>
+  <script>
+    (async function() {
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const queryParams = new URLSearchParams(window.location.search);
+        const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+        const idToken = hashParams.get('id_token') || queryParams.get('id_token');
+        const err = hashParams.get('error') || queryParams.get('error');
+
+        if (err) {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: err }, '*');
+            window.close();
+          } else {
+            window.location.replace('/');
+          }
+          return;
+        }
+
+        if (!accessToken) {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: 'Could not complete Google Sign-In.' }, '*');
+            window.close();
+          } else {
+            window.location.replace('/');
+          }
+          return;
+        }
+
+        const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: 'Bearer ' + accessToken }
+        });
+        const userInfo = await resp.json();
+
+        const nativeUser = {
+          uid: 'google_' + (userInfo.sub || userInfo.email),
+          sub: userInfo.sub || '',
+          email: userInfo.email || '',
+          displayName: userInfo.name || userInfo.given_name || (userInfo.email ? userInfo.email.split('@')[0] : 'User'),
+          photoURL: userInfo.picture || '',
+          accessToken: accessToken,
+          idToken: idToken || null,
+          ts: Date.now()
+        };
+
+        const payload = {
+          type: 'ADDMEUP_GOOGLE_OAUTH_SUCCESS',
+          user: nativeUser,
+          accessToken: accessToken,
+          idToken: idToken || null,
+          ts: Date.now()
+        };
+
+        localStorage.setItem('addmeup_native_google_user', JSON.stringify(nativeUser));
+        localStorage.setItem('addmeup_has_account', 'true');
+        if (idToken) {
+          localStorage.setItem('addmeup_google_id_token', idToken);
+        }
+        if (accessToken) {
+          localStorage.setItem('addmeup_google_access_token', accessToken);
+        }
+        if (nativeUser.email) {
+          localStorage.setItem('addmeup_saved_email', nativeUser.email);
+        }
+
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(payload, '*');
+          window.close();
+        } else {
+          window.location.replace('/');
+        }
+      } catch (e) {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'ADDMEUP_GOOGLE_OAUTH_ERROR', error: e.message || 'Sign-in error' }, '*');
+          window.close();
+        } else {
+          window.location.replace('/');
+        }
+      }
+    })();
+  </script>
+</body>
+</html>`);
 }
 
 app.get('/api/auth/google/callback', handleGoogleOAuthCallback);
 
-// Also catch Google OAuth callback if user configured root "/" or "/callback" or "/auth/google/callback" in Google Console
+// Also catch Google OAuth callback if redirected to root or another path with ?code=...
 app.use((req, res, next) => {
   if (
     req.method === 'GET' &&
@@ -184,28 +308,6 @@ app.use((req, res, next) => {
     return handleGoogleOAuthCallback(req, res);
   }
   next();
-});
-
-// Proxy /__/auth/* to Firebase Auth handler so custom authDomain (addmeup.ng) works seamlessly
-app.all('/__/auth/*', async (req, res) => {
-  try {
-    const targetUrl = `https://addmeup-95897.firebaseapp.com${req.originalUrl}`;
-    const response = await fetch(targetUrl, {
-      method: req.method,
-      headers: {
-        'User-Agent': req.get('user-agent') || 'Mozilla/5.0',
-        'Accept': req.get('accept') || '*/*',
-      },
-    });
-    res.status(response.status);
-    const contentType = response.headers.get('content-type');
-    if (contentType) res.setHeader('Content-Type', contentType);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    res.send(buffer);
-  } catch (err) {
-    console.error('[Firebase Auth Proxy] Error:', err);
-    res.status(502).send('Auth proxy error');
-  }
 });
 
 // Paystack Public Configuration endpoint

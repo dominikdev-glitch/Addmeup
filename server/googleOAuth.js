@@ -1,14 +1,11 @@
 /**
- * Native Google OAuth 2.0 Helper for Custom Domain Branding (https://addmeup.ng)
+ * Pure Native Google OAuth 2.0 Configuration for AddMeUp (https://addmeup.ng)
  *
- * Reads the downloaded Google Cloud Console OAuth 2.0 Client JSON from:
- * - process.env.GOOGLE_OAUTH_JSON
- * - process.env.GOOGLE_CLIENT_SECRET_JSON
- * - process.env.GOOGLE_SECRET_JSON
- * - Or if pasted into process.env.FIREBASE_ADMIN_JSON (when it contains "web" / "client_secret")
- * Or individual environment variables:
- * - process.env.GOOGLE_CLIENT_ID & process.env.GOOGLE_CLIENT_SECRET
+ * Uses your Google Cloud Console Web Client ID directly (no Firebase Google Auth).
  */
+
+const DEFAULT_ADDMEUP_CLIENT_ID =
+  '1044686821961-lapatnenhljp67o2pcrulsj5sgmcnlle.apps.googleusercontent.com';
 
 export function getGoogleOAuthConfig() {
   let clientId = (process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '').trim();
@@ -38,18 +35,23 @@ export function getGoogleOAuthConfig() {
       const parsed = JSON.parse(jsonString);
       const block = parsed.web || parsed.installed || parsed;
 
-      // Only treat as OAuth Client JSON if it has client_id and client_secret (not a service_account key)
-      if (block && block.client_id && block.client_secret && parsed.type !== 'service_account') {
+      if (block && block.client_id && parsed.type !== 'service_account') {
         clientId = block.client_id;
-        clientSecret = block.client_secret;
+        if (block.client_secret) {
+          clientSecret = block.client_secret;
+        }
       }
     } catch {
       // Ignore parse errors on non-matching env vars
     }
   }
 
+  if (!clientId) {
+    clientId = DEFAULT_ADDMEUP_CLIENT_ID;
+  }
+
   return {
-    isConfigured: Boolean(clientId && clientSecret),
+    isConfigured: true,
     clientId,
     clientSecret,
     explicitRedirectUri,

@@ -1,12 +1,12 @@
 {
-  "projectId": "addmeup-95897",
-  "appId": "1:47557698348:web:fc982fcf6367ecd7f50289",
-  "apiKey": "AIzaSyDZVd0wWOlo169ZwRUddaGPV-6tLSLesT4",
-  "authDomain": "addmeup-95897.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "addmeup-95897.firebasestorage.app",
-  "messagingSenderId": "47557698348",
-  "measurementId": "G-7QVSQR5D10",
-  "oAuthClientId": "",
+  "projectId": "gen-lang-client-0936491555",
+  "appId": "1:1093202393130:web:2a0b87d1ca26c901c22b53",
+  "apiKey": "AIzaSyBZAeV7Jx-iLtqz9-AOD-RBUcRe_d_ky9M",
+  "authDomain": "gen-lang-client-0936491555.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-7d6410bf-88e4-4073-b340-23b636dd1b26",
+  "storageBucket": "gen-lang-client-0936491555.firebasestorage.app",
+  "messagingSenderId": "1093202393130",
+  "measurementId": "",
+  "oAuthClientId": "1093202393130-3so24mal4rf7p8e4nf2a347clfbgp7pm.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
