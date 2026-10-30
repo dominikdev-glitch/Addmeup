@@ -124,7 +124,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({ page, onNavigate }) => {
                   <h2 className="text-base sm:text-lg font-black text-slate-900">3. How We Use Your Information</h2>
                   <p>We use the collected information strictly for the following purposes:</p>
                   <ul className="list-disc pl-5 space-y-1.5">
-                    <li>To authenticate your identity and maintain your secure user session via Firebase Authentication.</li>
+                    <li>To authenticate your identity and maintain your secure user session via AddMeUp's encrypted authentication infrastructure.</li>
                     <li>To display your chosen display name, avatar, and social handle on ads you intentionally publish to the AddMeUp feed.</li>
                     <li>To manage your promotional points wallet, referral bonuses, and ad boosts.</li>
                     <li>To prevent spam, fraud, or abuse of the community verification system.</li>
@@ -158,7 +158,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({ page, onNavigate }) => {
                 <section className="space-y-2">
                   <h2 className="text-base sm:text-lg font-black text-slate-900">5. Data Storage, Security & Retention</h2>
                   <p>
-                    Your account data is securely stored using Google Firebase Authentication and Cloud Firestore with encrypted HTTPS transport and strict security rules. Public feed listings only show the social handle and display name you choose to publish.
+                    Your account data is securely stored within AddMeUp's high-security cloud database with encrypted HTTPS transport, robust access controls, and strict security rules. Public feed listings only show the social handle and display name you choose to publish.
                   </p>
                 </section>
 

@@ -40,6 +40,7 @@ export const BOOST_PACKAGES: BoostPackage[] = [
 ];
 
 export const DEPOSIT_PACKAGES: DepositPackage[] = [
+  { id: 'pkg_10', credits: 10, priceNgn: 100, label: 'Micro Test Pack', bonusCredits: 0 },
   { id: 'pkg_100', credits: 100, priceNgn: 1000, label: 'Starter Pack', bonusCredits: 0 },
   { id: 'pkg_200', credits: 200, priceNgn: 2000, label: '12-Hour Ad Pack', bonusCredits: 0 },
   { id: 'pkg_450', credits: 450, priceNgn: 4500, label: '24-Hour Full Day', bonusCredits: 0, popular: true },
@@ -569,8 +570,11 @@ export async function processCreditDeposit(params: {
   const res = await runTransaction(db, async (transaction) => {
     const userSnap = await transaction.get(userRef);
     let currentBalance = 0;
+    let linkedUid: string | null = null;
     if (userSnap.exists()) {
-      currentBalance = Number(userSnap.data().creditBalance || 0);
+      const data = userSnap.data();
+      currentBalance = Number(data.creditBalance || 0);
+      linkedUid = data.linkedOriginalUid || data.canonicalUid || null;
     }
 
     const newBalance = currentBalance + credits;
@@ -578,7 +582,17 @@ export async function processCreditDeposit(params: {
     // 1. Update user balance
     transaction.set(userRef, {
       creditBalance: newBalance,
+      lastDepositAt: serverTimestamp(),
     }, { merge: true });
+
+    // Sync linked user document if exists
+    if (linkedUid && linkedUid !== userId) {
+      const linkedRef = doc(db, 'users', linkedUid);
+      transaction.set(linkedRef, {
+        creditBalance: newBalance,
+        lastDepositAt: serverTimestamp(),
+      }, { merge: true });
+    }
 
     // 2. Log deposit transaction
     const transRef = doc(collection(db, 'transactions'));
@@ -590,9 +604,24 @@ export async function processCreditDeposit(params: {
       paymentMethod,
       type: 'deposit',
       referenceId,
-      description: `Deposited ₦${amountNgn.toLocaleString('en-NG')} (+${credits} Credits via ${paymentMethod})`,
+      description: `Deposited ₦${amountNgn.toLocaleString('en-NG')} (+${credits} Points via ${paymentMethod})`,
       createdAt: serverTimestamp(),
     });
+
+    if (linkedUid && linkedUid !== userId) {
+      const linkedTransRef = doc(collection(db, 'transactions'));
+      transaction.set(linkedTransRef, {
+        transactionId: linkedTransRef.id,
+        userId: linkedUid,
+        amount: credits,
+        amountNgn,
+        paymentMethod,
+        type: 'deposit',
+        referenceId,
+        description: `Deposited ₦${amountNgn.toLocaleString('en-NG')} (+${credits} Points via ${paymentMethod})`,
+        createdAt: serverTimestamp(),
+      });
+    }
 
     return { success: true, newBalance };
   });

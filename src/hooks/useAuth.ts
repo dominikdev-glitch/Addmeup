@@ -696,16 +696,8 @@ export function useAuth() {
         err.code === 'auth/wrong-password' ||
         err.code === 'auth/invalid-credential'
       ) {
-        const isGmail =
-          email.trim().toLowerCase().includes('@gmail.com') ||
-          email.trim().toLowerCase().includes('@googlemail.com');
-        if (isGmail) {
-          throw new Error(
-            "No password match found for this Google email. Tap 'Continue with Google' above to sign in with Google, or tap 'Create Account' to register."
-          );
-        }
         throw new Error(
-          "No account found matching this email & password. If you don't have an account yet, tap 'Create Account' below to register free (+20 Pts)!"
+          "Incorrect email or password. Please double-check your credentials or sign in with Google."
         );
       } else if (err.code === 'auth/invalid-email') {
         throw new Error('Please provide a valid email address.');

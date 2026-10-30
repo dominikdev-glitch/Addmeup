@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { getFirebaseAdmin } from './server/firebaseAdmin.js';
 import { getGoogleOAuthConfig, resolveRedirectUri } from './server/googleOAuth.js';
@@ -376,7 +377,7 @@ app.post('/api/paystack/verify', async (req, res) => {
       });
     }
 
-    const calculatedCredits = Number(credits) || Math.round(paidNgn * 2);
+    const calculatedCredits = Number(credits) || Math.round(paidNgn / 10);
 
     // Credit user balance in Firestore using Firebase Admin SDK
     const creditResult = await creditUserDeposit({
@@ -433,7 +434,7 @@ app.post('/api/paystack/webhook', async (req, res) => {
     const creditsCount = 
       Number(data.metadata?.credits_count) || 
       Number(data.metadata?.custom_fields?.find(f => f.variable_name === 'credits_count')?.value) ||
-      Math.round(paidNgn * 2);
+      Math.round(paidNgn / 10);
 
     if (userUid && reference) {
       try {
@@ -461,6 +462,28 @@ app.post('/api/paystack/webhook', async (req, res) => {
 // Google Search Console verification file route
 app.get('/google7b85a384a73f8c2a.html', (_req, res) => {
   res.type('text/html').send('google-site-verification: google7b85a384a73f8c2a.html');
+});
+
+// Google Search Console & SEO Sitemap
+app.get('/sitemap.xml', (_req, res) => {
+  res.type('application/xml');
+  const sitemapDist = path.join(__dirname, 'dist', 'sitemap.xml');
+  const sitemapPublic = path.join(__dirname, 'public', 'sitemap.xml');
+  if (fs.existsSync(sitemapDist)) {
+    return res.sendFile(sitemapDist);
+  }
+  return res.sendFile(sitemapPublic);
+});
+
+// Robots.txt for Search Crawlers
+app.get('/robots.txt', (_req, res) => {
+  res.type('text/plain');
+  const robotsDist = path.join(__dirname, 'dist', 'robots.txt');
+  const robotsPublic = path.join(__dirname, 'public', 'robots.txt');
+  if (fs.existsSync(robotsDist)) {
+    return res.sendFile(robotsDist);
+  }
+  return res.sendFile(robotsPublic);
 });
 
 // Serve static assets from the dist directory

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Logo } from './Logo';
 import { 
   X, 
@@ -9,13 +9,10 @@ import {
   ArrowRight, 
   Coins,
   AlertCircle,
-  ExternalLink,
   CheckCircle2,
-  KeyRound,
   RefreshCw,
   Eye,
-  EyeOff,
-  UserPlus
+  EyeOff
 } from 'lucide-react';
 import { triggerHaptic } from '../lib/device';
 
@@ -27,23 +24,6 @@ interface AuthModalProps {
   onSendPasswordReset?: (email: string) => Promise<void>;
 }
 
-// Background check for existing account in browser/PWA storage
-function detectHasAccount(): boolean {
-  try {
-    if (localStorage.getItem('addmeup_has_account') === 'true') return true;
-    if (localStorage.getItem('addmeup_saved_email')) return true;
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && (key.startsWith('firebase:authUser:') || key.startsWith('addmeup_user'))) {
-        return true;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}
-
 export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onSignInGoogle,
@@ -51,49 +31,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onSignUpEmail,
   onSendPasswordReset,
 }) => {
-  // Detect browser/PWA storage silently in background:
-  // If no account is detected, open register box straight or Google signup!
-  const [hasBrowserAccount, setHasBrowserAccount] = useState<boolean>(() => detectHasAccount());
-
-  const [authMode, setAuthMode] = useState<'google' | 'email_login' | 'email_register' | 'forgot_password'>('google');
-
-  const [savedEmail] = useState<string>(() => {
-    try {
-      return localStorage.getItem('addmeup_saved_email') || '';
-    } catch {
-      return '';
-    }
-  });
-
-  const [email, setEmail] = useState<string>(() => {
-    try {
-      return localStorage.getItem('addmeup_saved_email') || '';
-    } catch {
-      return '';
-    }
-  });
-
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [resetSentSuccess, setResetSentSuccess] = useState(false);
-  const [popupBlocked, setPopupBlocked] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
-  // Background check sync
-  useEffect(() => {
-    const hasAccount = detectHasAccount();
-    setHasBrowserAccount(hasAccount);
-  }, []);
-
-  const isGoogleEmail = email.trim().toLowerCase().endsWith('@gmail.com') || email.trim().toLowerCase().endsWith('@googlemail.com');
+  const cleanErrorMessage = (rawError: any): string => {
+    const msg = String(rawError?.message || rawError || '');
+    if (msg.includes('user-not-found') || msg.includes('wrong-password') || msg.includes('invalid-credential')) {
+      return 'Incorrect email or password. Please check your credentials and try again.';
+    }
+    if (msg.includes('email-already-in-use')) {
+      return 'This email address is already registered. Please sign in instead.';
+    }
+    if (msg.includes('weak-password')) {
+      return 'Password should be at least 6 characters.';
+    }
+    if (msg.includes('invalid-email')) {
+      return 'Please enter a valid email address.';
+    }
+    if (msg.includes('network-request-failed')) {
+      return 'Network connection issue. Please check your internet connection.';
+    }
+    if (msg.includes('popup-closed-by-user')) {
+      return 'Google sign-in was closed before completion.';
+    }
+    return msg || 'Authentication error. Please try again.';
+  };
 
   const handleGoogleClick = async () => {
     triggerHaptic('medium');
     setErrorMessage(null);
-    setPopupBlocked(false);
     setGoogleLoading(true);
 
     try {
@@ -101,18 +74,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       triggerHaptic('success');
       onClose();
     } catch (err: any) {
-      console.warn("Google sign-in attempt notice:", err);
-      const errMsg = err?.message || '';
-      const isBlocked = errMsg.includes('popup-blocked') || 
-                        err?.code === 'auth/popup-blocked' || 
-                        errMsg.includes('cancelled-popup-request') ||
-                        errMsg.includes('redirect');
-
-      if (isBlocked) {
-        setPopupBlocked(true);
-        setErrorMessage("Browser or preview iframe blocked the Google login popup. Please click 'Open in New Tab' below to sign in, or set a password to use Email & Password.");
-      } else if (err?.code !== 'auth/popup-closed-by-user') {
-        setErrorMessage(errMsg || "Google sign-in could not complete. You can also use Email & Password below.");
+      console.warn("Google sign-in notice:", err);
+      const friendly = cleanErrorMessage(err);
+      if (!friendly.includes('closed before completion')) {
+        setErrorMessage(friendly);
       }
       triggerHaptic('warning');
     } finally {
@@ -120,12 +85,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!email.trim() || !password) {
-      setErrorMessage('Please enter both your email address and password.');
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setErrorMessage('Please enter your email address.');
+      return;
+    }
+
+    if (mode === 'forgot') {
+      if (!onSendPasswordReset) return;
+      setLoading(true);
+      triggerHaptic('medium');
+      try {
+        await onSendPasswordReset(cleanEmail);
+        setResetSuccess(true);
+        triggerHaptic('success');
+      } catch (err: any) {
+        setErrorMessage(cleanErrorMessage(err));
+        triggerHaptic('warning');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage('Please enter your password.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setErrorMessage('Password must be at least 6 characters long.');
       return;
     }
 
@@ -133,572 +126,346 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     triggerHaptic('medium');
 
     try {
-      if (authMode === 'email_login' && onSignInEmail) {
-        await onSignInEmail(email.trim(), password);
-        triggerHaptic('success');
-        onClose();
-      } else if (authMode === 'email_register' && onSignUpEmail) {
+      if (mode === 'signin') {
+        if (!onSignInEmail) throw new Error('Email sign-in is unavailable.');
+        await onSignInEmail(cleanEmail, password);
+      } else {
         if (!username.trim()) {
-          setErrorMessage('Please enter a display name or username.');
+          setErrorMessage('Please enter your display name.');
           setLoading(false);
           return;
         }
-        await onSignUpEmail(email.trim(), password, username.trim());
-        triggerHaptic('success');
-        onClose();
+        if (!onSignUpEmail) throw new Error('Registration is unavailable.');
+        await onSignUpEmail(cleanEmail, password, username.trim());
       }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please try again.');
-      triggerHaptic('warning');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePasswordResetSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    if (!email.trim()) {
-      setErrorMessage('Please enter your email address to receive the password link.');
-      return;
-    }
-
-    setLoading(true);
-    triggerHaptic('medium');
-
-    try {
-      if (onSendPasswordReset) {
-        await onSendPasswordReset(email.trim());
-      }
-      setResetSentSuccess(true);
       triggerHaptic('success');
+      onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Could not send password setup link. Please verify your email.');
+      setErrorMessage(cleanErrorMessage(err));
       triggerHaptic('warning');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const openAppInNewTab = () => {
-    try {
-      window.open(window.location.href, '_blank', 'noopener,noreferrer');
-    } catch (e) {
-      console.warn("Could not open new tab:", e);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-md animate-fade-in modal-safe-overlay">
-      <div className="glass-card border border-white/80 rounded-3xl p-5 sm:p-6 max-w-sm sm:max-w-md w-full text-slate-800 shadow-2xl relative text-center max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-md animate-fade-in">
+      <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-7 max-w-sm sm:max-w-md w-full text-slate-800 shadow-2xl relative max-h-[92vh] overflow-y-auto">
         
         {/* Close Button */}
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-all"
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-900 transition-all active:scale-95"
+          aria-label="Close modal"
         >
           <X className="w-4 h-4" />
         </button>
 
-        {/* Logo */}
-        <div className="flex justify-center mb-3">
-          <Logo size="lg" />
-        </div>
-
-        <h2 className="text-xl font-black text-slate-900 leading-tight">Welcome to AddMeUp</h2>
-        <p className="text-xs text-slate-500 mt-1 leading-snug font-medium max-w-xs mx-auto">
-          Sign in to add handles, earn promotional points, and grow your audience.
-        </p>
-
-        {/* Mode Selector Tabs */}
-        <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl my-4 text-xs font-bold text-slate-600">
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode('google');
-              setErrorMessage(null);
-              setResetSentSuccess(false);
-            }}
-            className={`flex-1 py-1.5 rounded-lg transition-all ${
-              authMode === 'google'
-                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                : 'hover:text-slate-900'
-            }`}
-          >
-            Google Sign-Up / Login
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const hasAcc = detectHasAccount();
-              setAuthMode(hasAcc ? 'email_login' : 'email_register');
-              setErrorMessage(null);
-              setResetSentSuccess(false);
-            }}
-            className={`flex-1 py-1.5 rounded-lg transition-all ${
-              authMode === 'email_login' || authMode === 'email_register' || authMode === 'forgot_password'
-                ? 'bg-white text-slate-900 shadow-2xs font-extrabold'
-                : 'hover:text-slate-900'
-            }`}
-          >
-            {hasBrowserAccount ? 'Email Sign-In' : 'Register (+20 Pts)'}
-          </button>
-        </div>
-
-        {/* Error Notice */}
-        {errorMessage && (
-          <div className="mb-3.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold text-left flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1 space-y-1.5">
-              <span className="leading-snug block">{errorMessage}</span>
-              
-              {/* Quick Actions based on error */}
-              <div className="pt-1 flex flex-wrap gap-1.5">
-                {/* 1. Register / Create Account Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('email_register');
-                    setErrorMessage(null);
-                  }}
-                  className="px-2.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-[10px] font-black shadow-2xs inline-flex items-center gap-1 active:scale-95"
-                >
-                  <UserPlus className="w-3 h-3" />
-                  <span>Create Account (+20 Pts)</span>
-                </button>
-
-                {/* 2. Try Google Sign-In */}
-                {(errorMessage.includes('Google') || isGoogleEmail) && (
-                  <button
-                    type="button"
-                    onClick={handleGoogleClick}
-                    className="px-2.5 py-1.5 bg-white hover:bg-slate-50 border border-rose-300 rounded-lg text-[10px] font-black text-slate-900 shadow-2xs inline-flex items-center gap-1 active:scale-95"
-                  >
-                    <span>Try Google Sign-In</span>
-                  </button>
-                )}
-
-                {/* 3. Set or Reset Password */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('forgot_password');
-                    setErrorMessage(null);
-                  }}
-                  className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[10px] font-black shadow-2xs inline-flex items-center gap-1 active:scale-95"
-                >
-                  <KeyRound className="w-3 h-3" />
-                  <span>Set/Reset Password</span>
-                </button>
-              </div>
-            </div>
+        {/* Brand Logo & Header */}
+        <div className="text-center mb-5">
+          <div className="flex justify-center mb-3">
+            <Logo size="lg" />
           </div>
-        )}
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">
+            {mode === 'signin' && 'Welcome Back'}
+            {mode === 'signup' && 'Create Your Account'}
+            {mode === 'forgot' && 'Reset Password'}
+          </h2>
+          <p className="text-xs text-slate-500 mt-1 font-medium max-w-xs mx-auto leading-relaxed">
+            {mode === 'signin' && 'Sign in to access your wallet, manage ads, and earn points.'}
+            {mode === 'signup' && 'Join AddMeUp to share your social handles and connect with real people.'}
+            {mode === 'forgot' && "Enter your email and we'll send you a secure password reset link."}
+          </p>
+        </div>
 
-        {/* Tab 1: Google Sign In */}
-        {authMode === 'google' && (
-          <div className="space-y-3.5">
-            
-            {/* Primary Google Login Button */}
+        {/* Classic 2-Tab Switcher (Sign In vs Create Account) */}
+        {mode !== 'forgot' && (
+          <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl mb-5 font-bold text-xs text-slate-600">
             <button
               type="button"
-              disabled={googleLoading}
-              onClick={handleGoogleClick}
-              className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 disabled:opacity-75 text-white font-black rounded-2xl text-xs sm:text-sm uppercase tracking-wider shadow-md flex items-center justify-center gap-3 transition-all active:scale-95"
+              onClick={() => {
+                setMode('signin');
+                setErrorMessage(null);
+              }}
+              className={`py-2 rounded-xl transition-all ${
+                mode === 'signin'
+                  ? 'bg-white text-slate-900 shadow-sm font-extrabold'
+                  : 'hover:text-slate-900'
+              }`}
             >
-              {googleLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-orange-400" />
-                  <span>Connecting to Google...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                  <span>Continue with Google</span>
-                </>
-              )}
+              Sign In
             </button>
-
-            {/* If popup blocked, show Open in New Tab helper */}
-            {popupBlocked && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-left space-y-2">
-                <p className="text-xs font-bold text-amber-900">
-                  Google login works best outside the preview frame:
-                </p>
-                <button
-                  type="button"
-                  onClick={openAppInNewTab}
-                  className="w-full py-2.5 px-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-2xs"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Open AddMeUp in New Tab</span>
-                </button>
-              </div>
-            )}
-
-            <div className="p-3 rounded-2xl bg-orange-50/70 border border-orange-100 text-left text-xs text-slate-700 space-y-1">
-              <span className="font-extrabold text-orange-950 block">Prefer email and password?</span>
-              <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-                If you have a Google email and want to sign in with a password, click{' '}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('forgot_password');
-                    setErrorMessage(null);
-                  }}
-                  className="text-orange-600 font-bold underline"
-                >
-                  Set a Password
-                </button>{' '}
-                to create your AddMeUp password.
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signup');
+                setErrorMessage(null);
+              }}
+              className={`py-2 rounded-xl transition-all ${
+                mode === 'signup'
+                  ? 'bg-white text-slate-900 shadow-sm font-extrabold'
+                  : 'hover:text-slate-900'
+              }`}
+            >
+              Create Account
+            </button>
           </div>
         )}
 
-        {/* Tab 2: Email & Password */}
-        {(authMode === 'email_login' || authMode === 'email_register') && (
-          <form onSubmit={handleEmailSubmit} className="space-y-3 text-left">
-            
-            {/* Sub-Switch: Sign In vs Create Account */}
-            <div className="flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200/80 text-[11px] font-extrabold">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('email_login');
-                  setErrorMessage(null);
-                }}
-                className={`flex-1 py-1.5 rounded-lg transition-all text-center ${
-                  authMode === 'email_login'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode('email_register');
-                  setErrorMessage(null);
-                }}
-                className={`flex-1 py-1.5 rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
-                  authMode === 'email_register'
-                    ? 'bg-orange-500 text-white shadow-2xs'
-                    : 'text-orange-600 hover:text-orange-700'
-                }`}
-              >
-                <UserPlus className="w-3 h-3" />
-                <span>Create Account (+20 Pts)</span>
-              </button>
+        {/* Error Notification */}
+        {errorMessage && (
+          <div className="mb-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+            <span className="leading-snug">{errorMessage}</span>
+          </div>
+        )}
+
+        {/* Forgot Password Success Screen */}
+        {mode === 'forgot' && resetSuccess ? (
+          <div className="text-center py-4 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+              <CheckCircle2 className="w-6 h-6" />
             </div>
-
-            {/* Quick 1-tap Google Sign-Up in Registration Box */}
-            {authMode === 'email_register' && (
-              <div className="space-y-2 pt-1 pb-1">
-                <button
-                  type="button"
-                  disabled={googleLoading}
-                  onClick={handleGoogleClick}
-                  className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 disabled:opacity-75 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95"
-                >
-                  {googleLoading ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-orange-400" />
-                      <span>Connecting to Google...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                      </svg>
-                      <span>1-Tap Google Sign-Up (+20 Pts)</span>
-                    </>
-                  )}
-                </button>
-
-                <div className="relative my-2.5 flex items-center justify-center">
-                  <div className="border-t border-slate-200 w-full" />
-                  <span className="bg-white px-2.5 text-[10px] uppercase font-black tracking-wider text-slate-400 absolute">
-                    or register with email
-                  </span>
-                </div>
-              </div>
-            )}
+            <div className="space-y-1">
+              <h3 className="text-base font-black text-slate-900">Password Reset Link Sent</h3>
+              <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                We've sent a link to <strong className="text-slate-900">{email}</strong>. Please check your inbox (and spam folder) to set your new password.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMode('signin');
+                setResetSuccess(false);
+              }}
+              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-2xl text-xs transition-all"
+            >
+              Back to Sign In
+            </button>
+          </div>
+        ) : (
+          /* Classic Authentication Form */
+          <form onSubmit={handleFormSubmit} className="space-y-3.5">
             
-            {authMode === 'email_register' && (
+            {/* Display Name Input (Only on Sign Up) */}
+            {mode === 'signup' && (
               <div>
-                <label className="block text-[11px] font-black text-slate-700 mb-1">
-                  Display Name
+                <label className="block text-xs font-black text-slate-700 mb-1">
+                  Your Full Name or Username
                 </label>
                 <div className="relative">
-                  <User className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                   <input
                     type="text"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Your Name or Nickname"
+                    placeholder="e.g. John Doe or @john"
                     required
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white transition-all font-medium"
                   />
                 </div>
               </div>
             )}
 
+            {/* Email Input */}
             <div>
-              <label className="block text-[11px] font-black text-slate-700 mb-1">
+              <label className="block text-xs font-black text-slate-700 mb-1">
                 Email Address
               </label>
               <div className="relative">
-                <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (errorMessage) setErrorMessage(null);
-                  }}
-                  placeholder="you@example.com (or Gmail)"
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@example.com"
                   autoComplete="email"
                   required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white transition-all font-medium"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-4 py-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white transition-all font-medium"
                 />
               </div>
+            </div>
 
-              {/* Detected Google Account Callout */}
-              {isGoogleEmail && (
-                <div className="mt-1.5 p-2 rounded-xl bg-blue-50 border border-blue-200/80 text-[11px] text-blue-950 flex items-center justify-between gap-2">
-                  <span className="font-semibold text-[10px] leading-tight">
-                    Google address detected. Have no password yet?
-                  </span>
+            {/* Password Input (Sign In & Sign Up) */}
+            {mode !== 'forgot' && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-black text-slate-700">
+                    Password
+                  </label>
+                  {mode === 'signin' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('forgot');
+                        setErrorMessage(null);
+                      }}
+                      className="text-xs text-orange-600 font-bold hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5 pointer-events-none" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-11 py-3 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white transition-all font-medium"
+                  />
                   <button
                     type="button"
-                    onClick={handleGoogleClick}
-                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[10px] font-black whitespace-nowrap"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
-                    1-Tap Google
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              )}
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] font-black text-slate-700">
-                  Password
-                </label>
-                {authMode === 'email_login' ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode('forgot_password');
-                      setErrorMessage(null);
-                    }}
-                    className="text-[10px] text-orange-600 font-bold hover:underline"
-                  >
-                    Forgot / Set Password?
-                  </button>
-                ) : (
-                  <span className="text-[9px] text-slate-400">Min. 6 chars</span>
-                )}
               </div>
-              <div className="relative">
-                <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete={authMode === 'email_register' ? 'new-password' : 'current-password'}
-                  required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-10 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white transition-all font-medium"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(prev => !prev)}
-                  className="absolute right-2.5 top-2 p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 active:scale-90 transition-all flex items-center justify-center"
-                  title={showPassword ? 'Hide password' : 'View password'}
-                  aria-label={showPassword ? 'Hide password' : 'View password'}
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4 text-slate-600" />
-                  ) : (
-                    <Eye className="w-4 h-4 text-slate-500" />
-                  )}
-                </button>
-              </div>
-            </div>
+            )}
 
+            {/* Signup Bonus Incentive Tag */}
+            {mode === 'signup' && (
+              <div className="p-2.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-900 text-xs font-bold flex items-center gap-2">
+                <Coins className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                <span>Includes <strong>+20 Free Welcome Points</strong> to start promoting immediately!</span>
+              </div>
+            )}
+
+            {/* Primary Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 mt-1"
+              className="w-full py-3.5 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-extrabold rounded-2xl text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
             >
               {loading ? (
-                <div className="flex items-center gap-1.5">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Verifying credentials...</span>
-                </div>
-              ) : authMode === 'email_login' ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Please wait...</span>
+                </>
+              ) : mode === 'signin' ? (
                 <>
                   <span>Sign In</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              ) : mode === 'signup' ? (
+                <>
+                  <span>Create Free Account</span>
+                  <ArrowRight className="w-4 h-4" />
                 </>
               ) : (
                 <>
-                  <span>Create Account & Claim +20 Points</span>
-                  <Coins className="w-3.5 h-3.5 text-amber-200" />
+                  <span>Send Reset Link</span>
+                  <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
 
-            {/* Toggle Login / Register */}
-            <div className="pt-2 text-center space-y-1">
-              {authMode === 'email_login' ? (
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Don't have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode('email_register');
-                      setErrorMessage(null);
-                    }}
-                    className="text-orange-600 font-black hover:underline"
-                  >
-                    Register free (+20 Pts)
-                  </button>
-                </p>
-              ) : (
-                <p className="text-[11px] text-slate-500 font-medium">
-                  Already have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode('email_login');
-                      setErrorMessage(null);
-                    }}
-                    className="text-orange-600 font-black hover:underline"
-                  >
-                    Log in here
-                  </button>
-                </p>
-              )}
-            </div>
-          </form>
-        )}
-
-        {/* Tab 3: Forgot Password / Set Password for Google Email */}
-        {authMode === 'forgot_password' && (
-          <div className="space-y-3.5 text-left">
-            {resetSentSuccess ? (
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-2.5">
-                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <h3 className="text-sm font-black text-emerald-950">Password Link Sent!</h3>
-                <p className="text-xs text-emerald-800 leading-relaxed font-medium">
-                  We've sent a secure password setup link to <strong className="font-mono text-emerald-950">{email}</strong>. Check your inbox to set a password, then sign in below!
-                </p>
+            {/* Back link when in forgot mode */}
+            {mode === 'forgot' && (
+              <div className="text-center pt-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setAuthMode('email_login');
-                    setResetSentSuccess(false);
+                    setMode('signin');
+                    setErrorMessage(null);
                   }}
-                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-xs transition-all mt-2"
+                  className="text-xs font-bold text-slate-500 hover:text-slate-900 hover:underline"
                 >
-                  Back to Sign In
+                  ← Back to Sign In
                 </button>
               </div>
-            ) : (
-              <form onSubmit={handlePasswordResetSubmit} className="space-y-3">
-                <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-2xl text-xs text-amber-950 space-y-1">
-                  <span className="font-black flex items-center gap-1">
-                    <KeyRound className="w-3.5 h-3.5 text-amber-600" />
-                    <span>Set or Reset Password</span>
+            )}
+
+            {/* Divider for 1-Tap Google Sign-In */}
+            {mode !== 'forgot' && (
+              <>
+                <div className="relative my-4 flex items-center justify-center">
+                  <div className="border-t border-slate-200 w-full" />
+                  <span className="bg-white px-3 text-[11px] uppercase font-bold tracking-wider text-slate-400 absolute">
+                    or continue with
                   </span>
-                  <p className="text-[11px] text-amber-900 leading-relaxed">
-                    Enter your email address (including your Google email). We'll email you a link to create your password so you can sign in with Email & Password anytime.
-                  </p>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-black text-slate-700 mb-1">
-                    Your Email Address
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@example.com"
-                      required
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-orange-500 focus:bg-white transition-all font-medium"
-                    />
-                  </div>
-                </div>
-
+                {/* Classic Google Sign-In Button */}
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs shadow-xs flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                  type="button"
+                  disabled={googleLoading}
+                  onClick={handleGoogleClick}
+                  className="w-full py-3 px-4 bg-white hover:bg-slate-50 border border-slate-300 rounded-2xl text-xs font-black text-slate-700 shadow-2xs flex items-center justify-center gap-2.5 transition-all active:scale-95"
                 >
-                  {loading ? (
-                    <div className="flex items-center gap-1.5">
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Sending link...</span>
-                    </div>
+                  {googleLoading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-orange-500" />
+                      <span>Connecting...</span>
+                    </>
                   ) : (
                     <>
-                      <span>Send Password Setup Link</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                      </svg>
+                      <span>{mode === 'signin' ? 'Continue with Google' : 'Sign Up with Google'}</span>
                     </>
                   )}
                 </button>
 
-                <div className="text-center pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode('email_login');
-                      setErrorMessage(null);
-                    }}
-                    className="text-xs font-bold text-slate-500 hover:text-slate-800 hover:underline"
-                  >
-                    ← Back to Sign In
-                  </button>
+                {/* Subtext Switcher */}
+                <div className="pt-2 text-center">
+                  {mode === 'signin' ? (
+                    <p className="text-xs text-slate-500 font-medium">
+                      Don't have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode('signup');
+                          setErrorMessage(null);
+                        }}
+                        className="text-orange-600 font-extrabold hover:underline"
+                      >
+                        Create Account (+20 Pts)
+                      </button>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500 font-medium">
+                      Already have an account?{' '}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode('signin');
+                          setErrorMessage(null);
+                        }}
+                        className="text-orange-600 font-extrabold hover:underline"
+                      >
+                        Sign In
+                      </button>
+                    </p>
+                  )}
                 </div>
-              </form>
+              </>
             )}
-          </div>
+
+          </form>
         )}
 
-        {/* Footer Guarantee & Legal Links */}
-        <div className="pt-3 mt-3 border-t border-slate-200/60 text-[10px] text-slate-500 font-medium space-y-1.5">
-          <div className="flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Encrypted Google & Firebase Authentication</span>
+        {/* White-labeled SSL & Security Guarantee */}
+        <div className="pt-4 mt-4 border-t border-slate-100 text-[10px] text-slate-500 text-center space-y-1">
+          <div className="flex items-center justify-center gap-1.5 text-emerald-600 font-bold">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>256-Bit SSL Encrypted & Secure Authentication</span>
           </div>
-          <p className="text-[10px] text-slate-400">
-            By continuing, you agree to our{' '}
-            <a href="/terms" className="text-slate-600 hover:text-orange-600 font-bold underline">
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a href="/privacy" className="text-slate-600 hover:text-orange-600 font-bold underline">
-              Privacy Policy
-            </a>
-            .
+          <p className="text-slate-400">
+            By signing in, you agree to AddMeUp's{' '}
+            <a href="/terms" className="text-slate-600 hover:text-orange-600 underline font-semibold">Terms</a> and{' '}
+            <a href="/privacy" className="text-slate-600 hover:text-orange-600 underline font-semibold">Privacy Policy</a>.
           </p>
         </div>
 

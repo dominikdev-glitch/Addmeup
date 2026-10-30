@@ -1,0 +1,8 @@
+# Robots.txt for AddMeUp (https://addmeup.ng)
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+# Google Search Console Sitemap
+Sitemap: https://addmeup.ng/sitemap.xml

@@ -36,15 +36,15 @@ export const AdminSettingsPage: React.FC = () => {
               <KeyRound className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-black text-white">Google Authentication Setup (Firebase Console)</h3>
+              <h3 className="text-base font-black text-white">Google Authentication & Domain Setup</h3>
               <p className="text-xs text-slate-400">
-                Direct links & domain configuration for Firebase Project <span className="text-orange-400 font-mono font-bold">addmeup-95897</span>
+                Direct links & domain configuration for Project <span className="text-orange-400 font-mono font-bold">addmeup-95897</span>
               </p>
             </div>
           </div>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[11px] font-black w-fit">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>SDK Wired & Ready</span>
+            <span>Configured & Ready</span>
           </span>
         </div>
 
@@ -55,9 +55,9 @@ export const AdminSettingsPage: React.FC = () => {
               <span className="text-[10px] font-black uppercase tracking-wider text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded-md inline-block">
                 Step 1 • Enable Google Provider
               </span>
-              <h4 className="text-sm font-black text-white">Turn On Google Sign-In in Firebase</h4>
+              <h4 className="text-sm font-black text-white">Google Sign-In Provider</h4>
               <ol className="text-xs text-slate-400 space-y-1.5 list-decimal list-inside leading-relaxed">
-                <li>Click the button below to open your Firebase Sign-in Providers page.</li>
+                <li>Click the button below to open your Sign-in Providers console.</li>
                 <li>Click <strong className="text-slate-200">Add new provider</strong> (or select <strong className="text-slate-200">Google</strong>).</li>
                 <li>Toggle <strong className="text-emerald-400">Enable</strong> on and pick your project support email (<code className="text-slate-200">heisgag1@gmail.com</code>).</li>
                 <li>Click <strong className="text-slate-200">Save</strong>.</li>
@@ -70,7 +70,7 @@ export const AdminSettingsPage: React.FC = () => {
               rel="noopener noreferrer"
               className="w-full py-2.5 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black text-xs flex items-center justify-center gap-2 transition-all shadow-md"
             >
-              <span>1. Open Firebase Sign-In Providers</span>
+              <span>1. Open Sign-In Providers Console</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           </div>

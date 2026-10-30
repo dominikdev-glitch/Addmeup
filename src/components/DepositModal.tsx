@@ -34,7 +34,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
 }) => {
   const [selectedPkg, setSelectedPkg] = useState<DepositPackage>(DEPOSIT_PACKAGES[0]);
   const [isCustom, setIsCustom] = useState(false);
-  const [customCredits, setCustomCredits] = useState<number>(100);
+  const [customCredits, setCustomCredits] = useState<number>(10);
   const [email, setEmail] = useState<string>(initialUserEmail || '');
   
   // Checkout flow state
@@ -96,8 +96,8 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               return;
             }
 
-            // 2. If server verified but needs client-side credit (e.g. Firebase Admin not in server env)
-            if (verifyRes.needsClientCredit) {
+            // 2. Guarantee user balance update: If server verified without Admin SDK or needs client credit
+            if (verifyRes.needsClientCredit || !verifyRes.credited) {
               await processCreditDeposit({
                 userId: userUid,
                 credits: totalCredits,
@@ -166,7 +166,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               <div>
                 <h2 className="text-base font-black text-slate-900 leading-tight">Deposit Points</h2>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[11px] text-slate-500 font-medium">₦1,000 NGN = 100 Points</span>
+                  <span className="text-[11px] text-slate-500 font-medium">₦100 NGN = 10 Points (₦10/pt)</span>
                   <span className="text-[9px] bg-orange-50 text-orange-700 font-bold px-1.5 py-0.2 rounded-md border border-orange-200">
                     Instant Top-up
                   </span>
@@ -245,15 +245,15 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               {isCustom && (
                 <div className="mt-2 p-2.5 rounded-xl bg-white/80 border border-slate-200 space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
-                    <span>Custom Points (Min 100):</span>
+                    <span>Custom Points (Min 10):</span>
                     <span className="font-mono text-orange-600 font-black">₦{(customCredits * 10).toLocaleString('en-NG')} NGN</span>
                   </div>
                   <input
                     type="number"
-                    min={100}
-                    step={50}
+                    min={10}
+                    step={10}
                     value={customCredits}
-                    onChange={(e) => setCustomCredits(Math.max(100, Number(e.target.value) || 100))}
+                    onChange={(e) => setCustomCredits(Math.max(10, Number(e.target.value) || 10))}
                     className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-orange-500"
                   />
                 </div>

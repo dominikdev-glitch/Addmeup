@@ -94,9 +94,21 @@ export async function creditUserDeposit({
     };
   }
 
+  // 2. Check for linked account
+  let linkedUid = null;
+  try {
+    const userDocSnap = await db.collection('users').doc(userId).get();
+    if (userDocSnap.exists) {
+      const uData = userDocSnap.data();
+      linkedUid = uData.linkedOriginalUid || uData.canonicalUid || null;
+    }
+  } catch (lookupErr) {
+    console.warn('[Paystack] Error looking up linked account:', lookupErr.message);
+  }
+
   const batch = db.batch();
 
-  // 2. Update user points balance atomically
+  // Update user points balance atomically
   const userRef = db.collection('users').doc(userId);
   batch.set(
     userRef,
@@ -106,6 +118,18 @@ export async function creditUserDeposit({
     },
     { merge: true }
   );
+
+  if (linkedUid && linkedUid !== userId) {
+    const linkedUserRef = db.collection('users').doc(linkedUid);
+    batch.set(
+      linkedUserRef,
+      {
+        creditBalance: FieldValue.increment(credits),
+        lastDepositAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
 
   // 3. Log to transactions collection
   const newTransRef = db.collection('transactions').doc();
@@ -124,6 +148,25 @@ export async function creditUserDeposit({
     verifiedAt: new Date().toISOString(),
     createdAt: FieldValue.serverTimestamp(),
   });
+
+  if (linkedUid && linkedUid !== userId) {
+    const linkedTransRef = db.collection('transactions').doc();
+    batch.set(linkedTransRef, {
+      transactionId: linkedTransRef.id,
+      userId: linkedUid,
+      amount: credits,
+      amountNgn,
+      paymentMethod,
+      type: 'deposit',
+      referenceId: reference,
+      paystackId: paystackData?.id || null,
+      channel: paystackData?.channel || 'card',
+      currency: paystackData?.currency || 'NGN',
+      description: `Deposited ₦${Number(amountNgn).toLocaleString('en-NG')} (+${credits} Points via ${paymentMethod})`,
+      verifiedAt: new Date().toISOString(),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   // 4. Create user notification
   const newNotifRef = db.collection('notifications').doc();
