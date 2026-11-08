@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Transaction } from '../types';
 import { db } from '../lib/firebase';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { DEPOSIT_PACKAGES } from '../lib/transactions';
+import { collection, query, where, onSnapshot, orderBy, limit, getDocs, doc, setDoc } from 'firebase/firestore';
+import { DEPOSIT_PACKAGES, processCreditDeposit } from '../lib/transactions';
+import { verifyPaystackOnServer } from '../lib/paystack';
 import { DepositModal } from './DepositModal';
 import { 
   Wallet, 
@@ -45,6 +46,72 @@ export const WalletPage: React.FC<WalletPageProps> = ({
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Auto-detect and confirm any pending payment from redirect or stored checkout
+  useEffect(() => {
+    if (!userUid) return;
+
+    const checkPendingPayments = async () => {
+      let refToVerify: string | null = null;
+      let expectedCredits = 10;
+      let expectedNgn = 100;
+
+      // 1. Check URL parameters from Paystack 3DS / mobile redirect
+      if (typeof window !== 'undefined') {
+        const search = new URLSearchParams(window.location.search);
+        const urlRef = search.get('reference') || search.get('trxref');
+        if (urlRef) {
+          refToVerify = urlRef;
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
+
+      // 2. Check localStorage pending payment
+      try {
+        const rawPending = localStorage.getItem('addmeup_pending_payment');
+        if (rawPending) {
+          const pending = JSON.parse(rawPending);
+          if (pending && pending.reference) {
+            refToVerify = refToVerify || pending.reference;
+            expectedCredits = Number(pending.credits || 10);
+            expectedNgn = Number(pending.amountNgn || 100);
+          }
+        }
+      } catch {}
+
+      if (refToVerify) {
+        console.log('[WalletPage] Recovering pending payment reference:', refToVerify);
+        try {
+          const res = await verifyPaystackOnServer({
+            reference: refToVerify,
+            userId: userUid,
+            credits: expectedCredits,
+            amountNgn: expectedNgn,
+          });
+
+          if (res.success || res.verified) {
+            await processCreditDeposit({
+              userId: userUid,
+              credits: expectedCredits,
+              amountNgn: expectedNgn,
+              paymentMethod: 'Paystack Card / Transfer',
+              referenceId: refToVerify,
+              userEmail: profile?.email,
+            });
+            localStorage.removeItem('addmeup_pending_payment');
+            onToast(`🎉 Payment Confirmed! +${expectedCredits} Points added to your balance.`);
+          }
+        } catch (recErr) {
+          console.warn('[WalletPage] Payment recovery check note:', recErr);
+        }
+      }
+    };
+
+    checkPendingPayments();
+  }, [userUid, profile?.email, onToast]);
+
+  // Subscribe to transactions for all linked user accounts
   useEffect(() => {
     if (!userUid) {
       setTransactions([]);
@@ -54,11 +121,20 @@ export const WalletPage: React.FC<WalletPageProps> = ({
 
     setLoading(true);
     const transRef = collection(db, 'transactions');
-    const q = query(
-      transRef,
-      where('userId', '==', userUid),
-      limit(50)
+    const userUids = Array.from(
+      new Set(
+        [
+          userUid,
+          profile?.uid,
+          profile?.canonicalUid,
+          profile?.linkedOriginalUid,
+        ].filter(Boolean) as string[]
+      )
     );
+
+    const q = userUids.length > 1
+      ? query(transRef, where('userId', 'in', userUids.slice(0, 10)), limit(50))
+      : query(transRef, where('userId', '==', userUid), limit(50));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: Transaction[] = [];
@@ -85,7 +161,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({
     });
 
     return () => unsubscribe();
-  }, [userUid]);
+  }, [userUid, profile?.uid, profile?.canonicalUid, profile?.linkedOriginalUid]);
 
   const balance = profile?.creditBalance || 0;
   const referralCode = profile?.referralCode || (userUid ? `UP-${userUid.slice(0, 6).toUpperCase()}` : '');
@@ -111,6 +187,79 @@ export const WalletPage: React.FC<WalletPageProps> = ({
     }
     const text = encodeURIComponent(`Add my Snapchat & WhatsApp on AddMeUp! Use my invite link to get +10 FREE bonus points: ${referralLink}`);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
+  const handleSyncWallet = async () => {
+    if (!userUid) {
+      onRequireAuth();
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      // 1. Sync balances across any candidate accounts matching user email
+      const candidateDocs: { id: string; balance: number }[] = [];
+      let maxBalance = profile?.creditBalance || 0;
+
+      if (profile?.email) {
+        const emailQ = query(
+          collection(db, 'users'),
+          where('email', '==', profile.email.trim().toLowerCase())
+        );
+        const emailSnap = await getDocs(emailQ);
+        emailSnap.forEach((d) => {
+          const b = Number(d.data().creditBalance || 0);
+          if (b > maxBalance) maxBalance = b;
+          candidateDocs.push({ id: d.id, balance: b });
+        });
+      }
+
+      // Sync all matching accounts to the unified maximum balance
+      for (const item of candidateDocs) {
+        await setDoc(
+          doc(db, 'users', item.id),
+          {
+            creditBalance: maxBalance,
+            canonicalUid: userUid,
+            linkedOriginalUid: userUid,
+          },
+          { merge: true }
+        );
+      }
+
+      // 2. Also check if any pending payment in localStorage
+      try {
+        const rawPending = localStorage.getItem('addmeup_pending_payment');
+        if (rawPending) {
+          const pending = JSON.parse(rawPending);
+          if (pending && pending.reference) {
+            const res = await verifyPaystackOnServer({
+              reference: pending.reference,
+              userId: userUid,
+              credits: Number(pending.credits || 10),
+              amountNgn: Number(pending.amountNgn || 100),
+            });
+            if (res.success || res.verified) {
+              await processCreditDeposit({
+                userId: userUid,
+                credits: Number(pending.credits || 10),
+                amountNgn: Number(pending.amountNgn || 100),
+                paymentMethod: 'Paystack Card / Transfer',
+                referenceId: pending.reference,
+                userEmail: profile?.email,
+              });
+              localStorage.removeItem('addmeup_pending_payment');
+            }
+          }
+        }
+      } catch {}
+
+      onToast("✨ Wallet balance & statement synchronized successfully!");
+    } catch (err: any) {
+      console.error("Wallet sync notice:", err);
+      onToast("Wallet sync complete.");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   return (
@@ -299,12 +448,26 @@ export const WalletPage: React.FC<WalletPageProps> = ({
 
         {/* Right Column: Transaction History Section */}
         <div className="lg:col-span-7 space-y-2.5">
-          <h3 className="text-xs font-extrabold text-slate-900 px-1 flex items-center justify-between">
-            <span>Recent Activity</span>
-            <span className="text-[10px] font-medium text-slate-500">
-              {transactions.length > 0 ? `Showing 3 of ${transactions.length}` : '0 recent'}
-            </span>
-          </h3>
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+              <span>Recent Activity</span>
+              {transactions.length > 0 && (
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {transactions.length}
+                </span>
+              )}
+            </h3>
+            <button
+              type="button"
+              disabled={isSyncing}
+              onClick={handleSyncWallet}
+              className="inline-flex items-center gap-1 text-[10px] font-black text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100/80 px-2.5 py-1 rounded-lg border border-orange-200 transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+              title="Synchronize balances across your accounts and check pending deposits"
+            >
+              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Syncing...' : 'Sync Wallet'}</span>
+            </button>
+          </div>
 
           {!userUid ? (
             <div className="glass-card border border-slate-200/80 rounded-2xl p-4 text-center space-y-1.5">

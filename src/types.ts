@@ -50,6 +50,8 @@ export interface UserProfile {
   totalClaimsCount?: number;
   dailyStreak?: number;
   lastDailyBonusDate?: string;
+  canonicalUid?: string;
+  linkedOriginalUid?: string;
   createdAt: string | number;
 }
 

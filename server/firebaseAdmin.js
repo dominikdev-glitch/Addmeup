@@ -68,23 +68,25 @@ export function getFirebaseAdmin() {
 
   if (serviceAccount && (serviceAccount.private_key || serviceAccount.privateKey)) {
     try {
+      const configDbId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-7d6410bf-88e4-4073-b340-23b636dd1b26';
+      const targetProjectId = serviceAccount.project_id || serviceAccount.projectId || process.env.FIREBASE_PROJECT_ID || 'gen-lang-client-0936491555';
+
       const existingApps = getApps();
       const app =
         existingApps.length === 0
           ? initializeApp({
               credential: cert({
-                projectId: serviceAccount.project_id || serviceAccount.projectId || 'addmeup-95897',
+                projectId: targetProjectId,
                 clientEmail: serviceAccount.client_email || serviceAccount.clientEmail,
                 privateKey: String(serviceAccount.private_key || serviceAccount.privateKey).replace(/\\n/g, '\n'),
               }),
             })
           : getApp();
 
-      db = getFirestore(app);
+      db = getFirestore(app, configDbId);
       isInitialized = true;
       console.log(
-        '✅ [Firebase Admin] Successfully initialized with project:',
-        serviceAccount.project_id || serviceAccount.projectId || 'addmeup-95897'
+        `✅ [Firebase Admin] Successfully initialized with project: ${targetProjectId}, db: ${configDbId}`
       );
       return { db, isConfigured: true };
     } catch (err) {

@@ -94,66 +94,48 @@ export async function creditUserDeposit({
     };
   }
 
-  // 2. Check for linked account
-  let linkedUid = null;
+  // 2. Resolve all candidate UIDs for this user (including email lookup & linked UIDs)
+  const candidateUids = new Set([userId]);
+  let userEmail = paystackData?.customer?.email || null;
+
   try {
     const userDocSnap = await db.collection('users').doc(userId).get();
     if (userDocSnap.exists) {
       const uData = userDocSnap.data();
-      linkedUid = uData.linkedOriginalUid || uData.canonicalUid || null;
+      if (uData.linkedOriginalUid) candidateUids.add(uData.linkedOriginalUid);
+      if (uData.canonicalUid) candidateUids.add(uData.canonicalUid);
+      if (uData.email) userEmail = uData.email;
+    }
+
+    if (userEmail) {
+      const emailQuery = await db.collection('users').where('email', '==', userEmail.toLowerCase().trim()).get();
+      emailQuery.forEach((doc) => {
+        candidateUids.add(doc.id);
+      });
     }
   } catch (lookupErr) {
-    console.warn('[Paystack] Error looking up linked account:', lookupErr.message);
+    console.warn('[Paystack] Error looking up linked accounts:', lookupErr.message);
   }
 
   const batch = db.batch();
 
-  // Update user points balance atomically
-  const userRef = db.collection('users').doc(userId);
-  batch.set(
-    userRef,
-    {
-      creditBalance: FieldValue.increment(credits),
-      lastDepositAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-
-  if (linkedUid && linkedUid !== userId) {
-    const linkedUserRef = db.collection('users').doc(linkedUid);
+  // Update points balance on all candidate user documents atomically
+  for (const uid of candidateUids) {
+    const uRef = db.collection('users').doc(uid);
     batch.set(
-      linkedUserRef,
+      uRef,
       {
         creditBalance: FieldValue.increment(credits),
         lastDepositAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
-  }
 
-  // 3. Log to transactions collection
-  const newTransRef = db.collection('transactions').doc();
-  batch.set(newTransRef, {
-    transactionId: newTransRef.id,
-    userId,
-    amount: credits,
-    amountNgn,
-    paymentMethod,
-    type: 'deposit',
-    referenceId: reference,
-    paystackId: paystackData?.id || null,
-    channel: paystackData?.channel || 'card',
-    currency: paystackData?.currency || 'NGN',
-    description: `Deposited ₦${Number(amountNgn).toLocaleString('en-NG')} (+${credits} Points via ${paymentMethod})`,
-    verifiedAt: new Date().toISOString(),
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  if (linkedUid && linkedUid !== userId) {
-    const linkedTransRef = db.collection('transactions').doc();
-    batch.set(linkedTransRef, {
-      transactionId: linkedTransRef.id,
-      userId: linkedUid,
+    // Also log transaction for each UID so both Google & Email sessions see the transaction
+    const newTransRef = db.collection('transactions').doc();
+    batch.set(newTransRef, {
+      transactionId: newTransRef.id,
+      userId: uid,
       amount: credits,
       amountNgn,
       paymentMethod,

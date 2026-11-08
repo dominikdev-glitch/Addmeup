@@ -558,61 +558,93 @@ export async function processCreditDeposit(params: {
   amountNgn: number;
   paymentMethod: string;
   referenceId: string;
+  userEmail?: string;
 }): Promise<{ success: boolean; newBalance: number }> {
-  const { userId, credits, amountNgn, paymentMethod, referenceId } = params;
+  const { userId, credits, amountNgn, paymentMethod, referenceId, userEmail } = params;
 
   if (!userId) {
     throw new Error("Sign in to get started");
   }
 
-  const userRef = doc(db, 'users', userId);
+  // 1. Check idempotency: check if transaction with referenceId already logged
+  try {
+    const existingTransQ = query(
+      collection(db, 'transactions'),
+      where('referenceId', '==', referenceId),
+      fsLimit(1)
+    );
+    const existingTransSnap = await getDocs(existingTransQ);
+    if (!existingTransSnap.empty) {
+      console.log(`[Deposit] Reference ${referenceId} already credited in Firestore.`);
+      const uSnap = await getDocs(query(collection(db, 'users'), where('uid', '==', userId)));
+      let b = 0;
+      uSnap.forEach(d => { b = Number(d.data().creditBalance || 0); });
+      return { success: true, newBalance: b };
+    }
+  } catch (checkErr) {
+    console.warn('[Deposit] Idempotency check notice:', checkErr);
+  }
+
+  // 2. Discover all candidate user UIDs for this user (including email matches & linked IDs)
+  const candidateUids = new Set<string>([userId]);
+  try {
+    const mainUserSnap = await getDocs(query(collection(db, 'users'), where('uid', '==', userId)));
+    let resolvedEmail = userEmail;
+    mainUserSnap.forEach((d) => {
+      const data = d.data();
+      if (data.linkedOriginalUid) candidateUids.add(data.linkedOriginalUid);
+      if (data.canonicalUid) candidateUids.add(data.canonicalUid);
+      if (data.email) resolvedEmail = data.email;
+    });
+
+    if (resolvedEmail) {
+      const emailQ = query(
+        collection(db, 'users'),
+        where('email', '==', resolvedEmail.trim().toLowerCase())
+      );
+      const emailSnap = await getDocs(emailQ);
+      emailSnap.forEach((d) => candidateUids.add(d.id));
+    }
+  } catch (lookupErr) {
+    console.warn('[Deposit] Candidate accounts lookup notice:', lookupErr);
+  }
+
+  const uidsArray = Array.from(candidateUids);
 
   const res = await runTransaction(db, async (transaction) => {
-    const userSnap = await transaction.get(userRef);
-    let currentBalance = 0;
-    let linkedUid: string | null = null;
-    if (userSnap.exists()) {
-      const data = userSnap.data();
-      currentBalance = Number(data.creditBalance || 0);
-      linkedUid = data.linkedOriginalUid || data.canonicalUid || null;
+    // Determine the highest existing balance among all linked accounts
+    let maxCurrentBalance = 0;
+    const snaps: { ref: any; id: string; exists: boolean; data: any }[] = [];
+
+    for (const uid of uidsArray) {
+      const uRef = doc(db, 'users', uid);
+      const s = await transaction.get(uRef);
+      if (s.exists()) {
+        const d = s.data();
+        const bal = Number(d.creditBalance || 0);
+        if (bal > maxCurrentBalance) maxCurrentBalance = bal;
+        snaps.push({ ref: uRef, id: uid, exists: true, data: d });
+      } else {
+        snaps.push({ ref: uRef, id: uid, exists: false, data: null });
+      }
     }
 
-    const newBalance = currentBalance + credits;
+    const newBalance = maxCurrentBalance + credits;
 
-    // 1. Update user balance
-    transaction.set(userRef, {
-      creditBalance: newBalance,
-      lastDepositAt: serverTimestamp(),
-    }, { merge: true });
-
-    // Sync linked user document if exists
-    if (linkedUid && linkedUid !== userId) {
-      const linkedRef = doc(db, 'users', linkedUid);
-      transaction.set(linkedRef, {
+    // Update ALL linked user docs with the unified new balance
+    for (const item of snaps) {
+      transaction.set(item.ref, {
         creditBalance: newBalance,
         lastDepositAt: serverTimestamp(),
       }, { merge: true });
     }
 
-    // 2. Log deposit transaction
-    const transRef = doc(collection(db, 'transactions'));
-    transaction.set(transRef, {
-      transactionId: transRef.id,
-      userId,
-      amount: credits,
-      amountNgn,
-      paymentMethod,
-      type: 'deposit',
-      referenceId,
-      description: `Deposited ₦${amountNgn.toLocaleString('en-NG')} (+${credits} Points via ${paymentMethod})`,
-      createdAt: serverTimestamp(),
-    });
-
-    if (linkedUid && linkedUid !== userId) {
-      const linkedTransRef = doc(collection(db, 'transactions'));
-      transaction.set(linkedTransRef, {
-        transactionId: linkedTransRef.id,
-        userId: linkedUid,
+    // Log transaction for every candidate UID so both Google & Email sessions see the transaction
+    for (const uid of uidsArray) {
+      const transRef = doc(collection(db, 'transactions'));
+      transaction.set(transRef, {
+        transactionId: transRef.id,
+        userId: uid,
         amount: credits,
         amountNgn,
         paymentMethod,

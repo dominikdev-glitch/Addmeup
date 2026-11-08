@@ -412,6 +412,8 @@ export function useAuth() {
             totalClaimsCount: Number(data.totalClaimsCount || 0),
             dailyStreak: Number(data.dailyStreak || 0),
             lastDailyBonusDate: data.lastDailyBonusDate || '',
+            canonicalUid: data.canonicalUid || data.linkedOriginalUid || user.uid,
+            linkedOriginalUid: data.linkedOriginalUid || data.canonicalUid || user.uid,
             createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
           });
         } else {

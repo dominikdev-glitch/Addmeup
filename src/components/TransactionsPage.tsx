@@ -58,11 +58,20 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({
 
     setLoading(true);
     const transRef = collection(db, 'transactions');
-    const q = query(
-      transRef,
-      where('userId', '==', userUid),
-      limit(150)
+    const userUids = Array.from(
+      new Set(
+        [
+          userUid,
+          profile?.uid,
+          profile?.canonicalUid,
+          profile?.linkedOriginalUid,
+        ].filter(Boolean) as string[]
+      )
     );
+
+    const q = userUids.length > 1
+      ? query(transRef, where('userId', 'in', userUids.slice(0, 10)), limit(150))
+      : query(transRef, where('userId', '==', userUid), limit(150));
 
     const unsubscribe = onSnapshot(
       q,

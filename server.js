@@ -465,25 +465,28 @@ app.get('/google7b85a384a73f8c2a.html', (_req, res) => {
 });
 
 // Google Search Console & SEO Sitemap
-app.get('/sitemap.xml', (_req, res) => {
-  res.type('application/xml');
+app.get(['/sitemap.xml', '/sitemap'], (_req, res) => {
   const sitemapDist = path.join(__dirname, 'dist', 'sitemap.xml');
   const sitemapPublic = path.join(__dirname, 'public', 'sitemap.xml');
-  if (fs.existsSync(sitemapDist)) {
-    return res.sendFile(sitemapDist);
-  }
-  return res.sendFile(sitemapPublic);
+  const filePath = fs.existsSync(sitemapDist) ? sitemapDist : sitemapPublic;
+  return res.sendFile(filePath, {
+    headers: {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 });
 
 // Robots.txt for Search Crawlers
-app.get('/robots.txt', (_req, res) => {
-  res.type('text/plain');
+app.get(['/robots.txt', '/robots'], (_req, res) => {
   const robotsDist = path.join(__dirname, 'dist', 'robots.txt');
   const robotsPublic = path.join(__dirname, 'public', 'robots.txt');
-  if (fs.existsSync(robotsDist)) {
-    return res.sendFile(robotsDist);
-  }
-  return res.sendFile(robotsPublic);
+  const filePath = fs.existsSync(robotsDist) ? robotsDist : robotsPublic;
+  return res.sendFile(filePath, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
+  });
 });
 
 // Serve static assets from the dist directory

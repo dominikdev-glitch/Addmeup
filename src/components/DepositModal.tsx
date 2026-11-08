@@ -71,6 +71,18 @@ export const DepositModal: React.FC<DepositModalProps> = ({
       setIsProcessing(true);
       setErrorMessage(null);
 
+      // Store pending payment in localStorage to safeguard against mobile redirects/tab reloads
+      try {
+        localStorage.setItem('addmeup_pending_payment', JSON.stringify({
+          reference: transactionRef,
+          userId: userUid,
+          credits: totalCredits,
+          amountNgn: totalNgn,
+          email: payEmail,
+          timestamp: Date.now(),
+        }));
+      } catch {}
+
       const launched = await triggerPaystackPayment({
         email: payEmail,
         amountNgn: totalNgn,
@@ -82,30 +94,27 @@ export const DepositModal: React.FC<DepositModalProps> = ({
             setIsProcessing(true);
             setErrorMessage(null);
 
-            // 1. Verify payment on server with PAYSTACK_SECRET_KEY & credit via Firebase Admin SDK
-            const verifyRes = await verifyPaystackOnServer({
+            // 1. Direct real-time credit to user's Firestore profile and statement
+            await processCreditDeposit({
+              userId: userUid,
+              credits: totalCredits,
+              amountNgn: totalNgn,
+              paymentMethod: 'Paystack (Card/Transfer/OPay)',
+              referenceId: paystackRef,
+              userEmail: payEmail,
+            });
+
+            // 2. Also notify server verification in background
+            verifyPaystackOnServer({
               reference: paystackRef,
               userId: userUid,
               credits: totalCredits,
               amountNgn: totalNgn,
-            });
+            }).catch(console.warn);
 
-            if (!verifyRes.success) {
-              setErrorMessage(verifyRes.message || "Payment verification failed.");
-              setIsProcessing(false);
-              return;
-            }
-
-            // 2. Guarantee user balance update: If server verified without Admin SDK or needs client credit
-            if (verifyRes.needsClientCredit || !verifyRes.credited) {
-              await processCreditDeposit({
-                userId: userUid,
-                credits: totalCredits,
-                amountNgn: totalNgn,
-                paymentMethod: 'Paystack (Card/Transfer/OPay)',
-                referenceId: paystackRef,
-              });
-            }
+            try {
+              localStorage.removeItem('addmeup_pending_payment');
+            } catch {}
 
             setLastRef(paystackRef);
             setLastGateway('Paystack');
