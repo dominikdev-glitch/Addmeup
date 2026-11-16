@@ -123,7 +123,19 @@ async function findBestExistingUserDoc(
   }
 }
 
+function sameAuthUser(a: AuthUser | null, b: AuthUser | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.uid === b.uid &&
+    a.email === b.email &&
+    a.displayName === b.displayName &&
+    a.photoURL === b.photoURL
+  );
+}
+
 function getStoredNativeGoogleUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem('addmeup_native_google_user');
     if (!raw) return null;
@@ -148,11 +160,69 @@ function getStoredNativeGoogleUser(): AuthUser | null {
   }
 }
 
+function getInitialCachedUser(): AuthUser | null {
+  const native = getStoredNativeGoogleUser();
+  if (native) return native;
+  if (typeof window === 'undefined') return null;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('firebase:authUser:')) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.uid) {
+            return {
+              uid: parsed.uid,
+              email: parsed.email || null,
+              displayName: parsed.displayName || null,
+              photoURL: parsed.photoURL || null,
+            };
+          }
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function getCachedProfile(uid?: string | null): UserProfile | null {
+  if (!uid || typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(`addmeup_cached_profile_${uid}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.uid === uid) {
+      return parsed as UserProfile;
+    }
+  } catch {}
+  return null;
+}
+
+function saveCachedProfile(prof: UserProfile) {
+  if (typeof window === 'undefined' || !prof?.uid) return;
+  try {
+    localStorage.setItem(`addmeup_cached_profile_${prof.uid}`, JSON.stringify(prof));
+  } catch {}
+}
+
 export function useAuth() {
-  const [user, setUser] = useState<AuthUser | null>(() => getStoredNativeGoogleUser());
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(() => getInitialCachedUser());
+  const [profile, setProfile] = useState<UserProfile | null>(() =>
+    getCachedProfile(getInitialCachedUser()?.uid)
+  );
+  // Render immediately without blocking splash when a cached user exists OR for first-time visitors
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const cachedUser = getInitialCachedUser();
+    if (cachedUser) return false;
+    return localStorage.getItem('addmeup_has_account') === 'true';
+  });
   const [error, setError] = useState<string | null>(null);
+
+  const setUserIfChanged = useCallback((next: AuthUser | null) => {
+    setUser((prev) => (sameAuthUser(prev, next) ? prev : next));
+  }, []);
 
   // Capture referral code from URL parameter e.g., ?ref=UP-ABC123 or ?ref=USER_UID
   useEffect(() => {
@@ -179,10 +249,14 @@ export function useAuth() {
       (email ? email.split('@')[0] : 'Friend');
     const photoURL = rawUser.photoURL || rawUser.picture || '';
 
-    // 1. Check if tokens exist to sign in with Firebase Auth credential in background
+    // 1. Only link Firebase Auth credential if not already signed in with same email
+    const currentFbEmail = auth.currentUser?.email?.toLowerCase();
+    const alreadyLinkedSameEmail = Boolean(
+      auth.currentUser?.uid && email && currentFbEmail === email.toLowerCase()
+    );
     const idToken = rawUser.idToken || localStorage.getItem('addmeup_google_id_token');
     const accessToken = rawUser.accessToken || localStorage.getItem('addmeup_google_access_token');
-    if (idToken || accessToken) {
+    if (!alreadyLinkedSameEmail && (idToken || accessToken)) {
       try {
         const cred = GoogleAuthProvider.credential(idToken || null, accessToken || null);
         const fbCred = await signInWithCredential(auth, cred);
@@ -193,10 +267,15 @@ export function useAuth() {
       } catch (fbErr) {
         console.warn('Firebase Auth credential linking note:', fbErr);
       }
+    } else if (alreadyLinkedSameEmail && auth.currentUser?.uid && resolvedUid.startsWith('google_')) {
+      resolvedUid = auth.currentUser.uid;
     }
 
-    // 2. Look up existing Firestore user document by email so pre-existing accounts keep their UID & points
-    if (email) {
+    // 2. Look up existing Firestore user document only if UID is missing or provisional (google_*)
+    const linkedUid = localStorage.getItem('addmeup_linked_firebase_uid');
+    const needsLookup =
+      resolvedUid.startsWith('google_') || !linkedUid || linkedUid !== resolvedUid;
+    if (email && needsLookup) {
       const existing = await findBestExistingUserDoc(email);
       if (existing && existing.uid) {
         resolvedUid = existing.uid;
@@ -230,9 +309,9 @@ export function useAuth() {
       // Ignore storage errors
     }
 
-    setUser(finalUser);
+    setUserIfChanged(finalUser);
     setLoading(false);
-  }, []);
+  }, [setUserIfChanged]);
 
   // Handle direct callback hash (#access_token=...) if the SPA ever loads on /api/auth/google/callback
   useEffect(() => {
@@ -282,11 +361,11 @@ export function useAuth() {
   useEffect(() => {
     const fallbackTimer = setTimeout(() => {
       setLoading(false);
-    }, 1200);
+    }, 900);
 
-    // If a Native Google OAuth session exists in localStorage, resolve its UID by email
+    // If a Native Google OAuth session exists in localStorage and its UID is provisional, resolve in background
     const storedGoogle = getStoredNativeGoogleUser();
-    if (storedGoogle) {
+    if (storedGoogle && storedGoogle.uid.startsWith('google_')) {
       activateNativeGoogleUser(storedGoogle);
     }
 
@@ -301,7 +380,7 @@ export function useAuth() {
           }
         } catch {}
 
-        setUser({
+        setUserIfChanged({
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
@@ -311,9 +390,9 @@ export function useAuth() {
       } else {
         const currentNative = getStoredNativeGoogleUser();
         if (currentNative) {
-          setUser(currentNative);
+          setUserIfChanged(currentNative);
         } else {
-          setUser(null);
+          setUserIfChanged(null);
           setProfile(null);
         }
         setLoading(false);
@@ -324,7 +403,7 @@ export function useAuth() {
       clearTimeout(fallbackTimer);
       unsubAuth();
     };
-  }, [activateNativeGoogleUser]);
+  }, [activateNativeGoogleUser, setUserIfChanged]);
 
   // Subscribe to Firestore profile document whenever `user` changes
   useEffect(() => {
@@ -336,29 +415,30 @@ export function useAuth() {
     const userRef = doc(db, 'users', user.uid);
     const myReferralCode = `UP-${user.uid.replace(/^google_/, '').slice(0, 6).toUpperCase()}`;
 
-    // Immediate fallback profile so UI remains interactive
-    setProfile((prev) =>
-      prev && prev.uid === user.uid
-        ? prev
-        : {
-            uid: user.uid,
-            username: user.displayName || `User_${user.uid.slice(0, 5)}`,
-            email: user.email || undefined,
-            photoUrl: user.photoURL || undefined,
-            creditBalance: 20,
-            isAdmin: user.email === 'heisgag1@gmail.com',
-            isBanned: false,
-            snapchatHandle: '',
-            whatsappNumber: '',
-            referralCode: myReferralCode,
-            referralsCount: 0,
-            referralCreditsEarned: 0,
-            approvedClaimsCount: 0,
-            totalClaimsCount: 0,
-            dailyStreak: 0,
-            createdAt: Date.now(),
-          }
-    );
+    // Immediate cached or fallback profile so UI remains interactive without balance flash
+    setProfile((prev) => {
+      if (prev && prev.uid === user.uid) return prev;
+      const cached = getCachedProfile(user.uid);
+      if (cached) return cached;
+      return {
+        uid: user.uid,
+        username: user.displayName || `User_${user.uid.slice(0, 5)}`,
+        email: user.email || undefined,
+        photoUrl: user.photoURL || undefined,
+        creditBalance: 20,
+        isAdmin: user.email === 'heisgag1@gmail.com',
+        isBanned: false,
+        snapchatHandle: '',
+        whatsappNumber: '',
+        referralCode: myReferralCode,
+        referralsCount: 0,
+        referralCreditsEarned: 0,
+        approvedClaimsCount: 0,
+        totalClaimsCount: 0,
+        dailyStreak: 0,
+        createdAt: Date.now(),
+      };
+    });
 
     const unsubProfile = onSnapshot(
       userRef,
@@ -382,7 +462,7 @@ export function useAuth() {
                 photoURL: user.photoURL || existingAccount.data?.photoUrl || null,
               };
               localStorage.setItem('addmeup_native_google_user', JSON.stringify(restoredUser));
-              setUser(restoredUser);
+              setUserIfChanged(restoredUser);
               return;
             }
           }
@@ -394,7 +474,7 @@ export function useAuth() {
             setDoc(userRef, { isAdmin: false }, { merge: true }).catch(console.error);
           }
 
-          setProfile({
+          const liveProfile: UserProfile = {
             uid: user.uid,
             username: data.username || user.displayName || 'Friend',
             email: user.email || data.email || undefined,
@@ -415,7 +495,9 @@ export function useAuth() {
             canonicalUid: data.canonicalUid || data.linkedOriginalUid || user.uid,
             linkedOriginalUid: data.linkedOriginalUid || data.canonicalUid || user.uid,
             createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
-          });
+          };
+          saveCachedProfile(liveProfile);
+          setProfile(liveProfile);
         } else {
           // Document does NOT exist at this UID!
           // STOP! Before creating a new document with 20 points, check if this email already exists anywhere in Firestore!
@@ -433,7 +515,7 @@ export function useAuth() {
                 photoURL: user.photoURL || existingAccount.data?.photoUrl || null,
               };
               localStorage.setItem('addmeup_native_google_user', JSON.stringify(restoredUser));
-              setUser(restoredUser);
+              setUserIfChanged(restoredUser);
               return;
             }
           }
@@ -481,7 +563,7 @@ export function useAuth() {
     return () => {
       unsubProfile();
     };
-  }, [user?.uid, user?.email, user?.displayName, user?.photoURL]);
+  }, [user?.uid, user?.email, user?.displayName, user?.photoURL, setUserIfChanged]);
 
   // PURE NATIVE GOOGLE OAUTH 2.0 (No Firebase Google Auth)
   const signInWithGoogle = async () => {

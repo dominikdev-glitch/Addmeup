@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdmin } from './firebaseAdmin.js';
+import { sendDepositConfirmationEmail } from './emailService.js';
 
 export const PAYSTACK_SECRET_KEY = 
   process.env.PAYSTACK_SECRET_KEY || '';
@@ -165,6 +166,17 @@ export async function creditUserDeposit({
   });
 
   await batch.commit();
+
+  // Send official confirmation email receipt
+  if (userEmail) {
+    sendDepositConfirmationEmail({
+      toEmail: userEmail,
+      amountNgn,
+      credits,
+      reference,
+      paymentMethod,
+    }).catch((e) => console.warn('[Paystack] Email receipt error:', e));
+  }
 
   console.log(`[Paystack] Successfully credited user ${userId} with +${credits} points for ref ${reference}`);
   return {

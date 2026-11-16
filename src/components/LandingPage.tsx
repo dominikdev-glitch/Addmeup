@@ -405,10 +405,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </a>
           <span className="text-slate-300">•</span>
           <a
-            href="mailto:heisgag1@gmail.com"
+            href="https://wa.me/2349040464774?text=Hello%20AddMeUp%20Support"
+            target="_blank"
+            rel="noopener noreferrer"
             className="hover:text-orange-600 underline transition-colors"
           >
-            Contact Support
+            WhatsApp Support (+234 904 046 4774)
           </a>
         </div>
         <p>AddMeUp © {new Date().getFullYear()} • Social Handle Exchange Platform (addmeup.ng)</p>

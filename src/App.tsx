@@ -19,9 +19,10 @@ import { MobileInstallPrompt } from './components/MobileInstallPrompt';
 import { Logo } from './components/Logo';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from './lib/firebase';
-import { CheckCircle2, AlertCircle, X, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertCircle, X, RefreshCw, Headphones } from 'lucide-react';
 import { Ad } from './types';
 import { triggerSystemNotification } from './lib/pushNotifications';
+import { SupportModal } from './components/SupportModal';
 
 export default function App() {
   const {
@@ -88,6 +89,7 @@ export default function App() {
   const [showMyAdsModal, setShowMyAdsModal] = useState(false);
   const [showDailyBonusModal, setShowDailyBonusModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
   const [selectedAdForBoost, setSelectedAdForBoost] = useState<Ad | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pendingClaimsCount, setPendingClaimsCount] = useState(0);
@@ -336,6 +338,7 @@ export default function App() {
             onViewAllTransactions={() => setActiveTab('transactions')}
             onRequireAuth={() => setShowAuthModal(true)}
             onToast={showToast}
+            onOpenSupport={() => setShowSupportModal(true)}
           />
         )}
 
@@ -492,6 +495,30 @@ export default function App() {
           onSignUpEmail={signUpWithEmail}
           onSendPasswordReset={sendPasswordReset}
         />
+      )}
+
+      {/* Live Support Modal (WhatsApp & In-App Human Desk) */}
+      {showSupportModal && (
+        <SupportModal
+          isOpen={showSupportModal}
+          onClose={() => setShowSupportModal(false)}
+          userUid={user?.uid || null}
+          profile={profile}
+          onToast={showToast}
+        />
+      )}
+
+      {/* Floating Live Support Icon (Feed home view only; hidden on Admin & secondary tabs) */}
+      {activeTab === 'feed' && (
+        <button
+          type="button"
+          onClick={() => setShowSupportModal(true)}
+          aria-label="Live Support"
+          title="Chat with Support"
+          className="fixed bottom-6 right-4 sm:right-6 z-40 w-11 h-11 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white shadow-lg shadow-emerald-950/25 flex items-center justify-center border border-emerald-400/40 transition-all hover:scale-105 active:scale-95 cursor-pointer group"
+        >
+          <Headphones className="w-5 h-5 text-white group-hover:rotate-6 transition-transform" />
+        </button>
       )}
 
       {/* Native Mobile PWA Install Prompt Banner */}

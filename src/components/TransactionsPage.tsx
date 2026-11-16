@@ -18,10 +18,12 @@ import {
   Sparkles,
   TrendingUp,
   TrendingDown,
-  Wallet
+  Wallet,
+  Printer
 } from 'lucide-react';
 import { triggerHaptic } from '../lib/device';
 import { DepositModal } from './DepositModal';
+import { DepositReceiptModal, ReceiptData } from './DepositReceiptModal';
 
 interface TransactionsPageProps {
   userUid: string | null;
@@ -48,6 +50,7 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [copiedRefId, setCopiedRefId] = useState<string | null>(null);
   const [isDepositOpen, setIsDepositOpen] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
 
   useEffect(() => {
     if (!userUid) {
@@ -492,6 +495,25 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({
                         ₦{tx.amountNgn.toLocaleString('en-NG')}
                       </div>
                     )}
+                    {isDeposit && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReceipt({
+                          referenceId: tx.referenceId || tx.transactionId,
+                          amountNgn: tx.amountNgn || tx.amount * 10,
+                          credits: tx.amount,
+                          paymentMethod: tx.paymentMethod || 'Paystack Instant Settlement',
+                          createdAt: tx.createdAt,
+                          userEmail: profile?.email,
+                          userId: userUid || undefined,
+                        })}
+                        className="mt-1 ml-auto flex items-center gap-1 text-[10px] font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2 py-0.5 rounded-md border border-orange-200 transition-colors"
+                        title="View printable transaction voucher"
+                      >
+                        <Printer className="w-2.5 h-2.5" />
+                        <span>Receipt</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -508,6 +530,16 @@ export const TransactionsPage: React.FC<TransactionsPageProps> = ({
         userEmail={profile?.email}
         onToast={onToast}
       />
+
+      {/* Deposit Receipt Modal */}
+      {selectedReceipt && (
+        <DepositReceiptModal
+          isOpen={!!selectedReceipt}
+          onClose={() => setSelectedReceipt(null)}
+          receipt={selectedReceipt}
+          onToast={onToast}
+        />
+      )}
     </div>
   );
 };

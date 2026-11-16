@@ -14,8 +14,10 @@ import {
   RefreshCw,
   AlertCircle,
   Lock,
-  Mail
+  Mail,
+  Printer
 } from 'lucide-react';
+import { DepositReceiptModal, ReceiptData } from './DepositReceiptModal';
 
 interface DepositModalProps {
   isOpen: boolean;
@@ -43,6 +45,7 @@ export const DepositModal: React.FC<DepositModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastRef, setLastRef] = useState<string>('');
   const [lastGateway, setLastGateway] = useState<string>('Paystack');
+  const [showReceipt, setShowReceipt] = useState(false);
 
   if (!isOpen) return null;
 
@@ -440,17 +443,51 @@ export const DepositModal: React.FC<DepositModalProps> = ({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleFinish}
-              className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-md shadow-orange-500/25 transition-all active:scale-95"
-            >
-              Back to Wallet & Post Ads
-            </button>
+            <div className="bg-emerald-50 border border-emerald-200/70 rounded-xl p-2.5 text-emerald-800 text-[11px] font-medium text-left flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Payment confirmed via Paystack. Your points are ready to use!</span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowReceipt(true)}
+                className="flex-1 py-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 rounded-2xl font-black text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95"
+              >
+                <Printer className="w-4 h-4 text-slate-600" />
+                <span>View & Print Receipt</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFinish}
+                className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-md shadow-orange-500/25 transition-all active:scale-95"
+              >
+                Done
+              </button>
+            </div>
           </div>
         )}
 
       </div>
+
+      {/* Official Printable Receipt Modal */}
+      {showReceipt && (
+        <DepositReceiptModal
+          isOpen={showReceipt}
+          onClose={() => setShowReceipt(false)}
+          receipt={{
+            referenceId: lastRef,
+            amountNgn: totalNgn,
+            credits: totalCredits,
+            paymentMethod: `${lastGateway} (Instant Settlement)`,
+            createdAt: Date.now(),
+            userEmail: email.trim() || initialUserEmail,
+            userId: userUid || undefined,
+          }}
+          onToast={onToast}
+        />
+      )}
     </div>
   );
 };

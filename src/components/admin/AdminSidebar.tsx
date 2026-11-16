@@ -10,11 +10,12 @@ import {
   ArrowLeft, 
   Shield, 
   Banknote,
-  X
+  X,
+  Headphones
 } from 'lucide-react';
 import { UserProfile } from '../../types';
 
-export type AdminTab = 'overview' | 'finances' | 'users' | 'ads' | 'reports' | 'claims' | 'settings';
+export type AdminTab = 'overview' | 'finances' | 'users' | 'ads' | 'reports' | 'claims' | 'support' | 'settings';
 
 interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -22,6 +23,7 @@ interface AdminSidebarProps {
   onExit: () => void;
   openReportsCount: number;
   pendingClaimsCount: number;
+  awaitingSupportCount?: number;
   totalUsersCount: number;
   activeAdsCount: number;
   grossRevenueNgn: number;
@@ -36,6 +38,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onExit,
   openReportsCount,
   pendingClaimsCount,
+  awaitingSupportCount = 0,
   totalUsersCount,
   activeAdsCount,
   grossRevenueNgn,
@@ -90,6 +93,14 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       badge: openReportsCount > 0 ? `${openReportsCount} open` : null,
       badgeColor: 'bg-rose-500 text-white animate-pulse',
       description: 'Flagged ads & moderation',
+    },
+    {
+      id: 'support' as AdminTab,
+      label: 'Support Desk',
+      icon: Headphones,
+      badge: awaitingSupportCount > 0 ? `${awaitingSupportCount} waiting` : null,
+      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      description: 'Live tickets & customer wallet help',
     },
     {
       id: 'settings' as AdminTab,

@@ -142,6 +142,38 @@
         "createdAt": { "type": "number" }
       },
       "required": ["likeId", "adId", "userId", "createdAt"]
+    },
+    "SupportMessage": {
+      "title": "SupportMessage",
+      "description": "Customer live support inquiry or agent reply",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "message": { "type": "string" },
+        "sender": { "type": "string", "enum": ["user", "agent"] },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "message", "sender"]
+    },
+    "SupportChat": {
+      "title": "SupportChat",
+      "description": "Support conversation metadata and ticket resolution status per user session",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in_progress", "resolved"] },
+        "lastMessage": { "type": "string" },
+        "lastSender": { "type": "string", "enum": ["user", "agent"] },
+        "unreadByAgent": { "type": "boolean" },
+        "updatedAt": { "type": "number" },
+        "resolvedAt": { "type": "number" }
+      },
+      "required": ["userId", "status", "updatedAt"]
     }
   },
   "firestore": {
@@ -172,6 +204,14 @@
     "/reports/{reportId}": {
       "schema": "AdReport",
       "description": "Moderation and safety reports"
+    },
+    "/support_messages/{messageId}": {
+      "schema": "SupportMessage",
+      "description": "Customer live support tickets and agent messages"
+    },
+    "/support_chats/{chatId}": {
+      "schema": "SupportChat",
+      "description": "Support ticket status and thread summary documents keyed by userId"
     }
   }
 }

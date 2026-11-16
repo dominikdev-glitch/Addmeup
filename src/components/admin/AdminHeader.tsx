@@ -40,6 +40,11 @@ const TAB_TITLES: Record<AdminTab, { title: string; subtitle: string; category: 
     subtitle: 'Investigate community flagged ads, resolve violations and remove offensive materials',
     category: 'Trust & Safety',
   },
+  support: {
+    title: 'Support Desk',
+    subtitle: 'Manage live customer inquiries, resolve deposit tickets and reply in real time',
+    category: 'Customer Experience',
+  },
   settings: {
     title: 'Platform Rules & Economy',
     subtitle: 'Configure reward rates, points conversion economics and streak reward multipliers',

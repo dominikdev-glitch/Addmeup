@@ -17,7 +17,6 @@ import { db } from '../lib/firebase';
 import { 
   Search, 
   PlusCircle, 
-  RefreshCw, 
   Rocket,
   Flame,
   LayoutGrid
@@ -36,6 +35,35 @@ interface FeedPageProps {
   allAds?: Ad[];
 }
 
+const FEED_CACHE_KEY = 'addmeup_cached_feed_ads_v1';
+
+function getCachedFeedAds(): Ad[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(FEED_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const now = Date.now();
+    return parsed.filter((ad: Ad) => ad && Number(ad.expiresAt || 0) > now);
+  } catch {
+    return [];
+  }
+}
+
+function saveCachedFeedAds(ads: Ad[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    // Strip large inline base64 strings so cache stays small and well within localStorage quota
+    const compact = ads.slice(0, 60).map((ad) => ({
+      ...ad,
+      imageUrl: ad.imageUrl && ad.imageUrl.length < 4096 ? ad.imageUrl : undefined,
+      avatarUrl: ad.avatarUrl && ad.avatarUrl.length < 4096 ? ad.avatarUrl : undefined,
+    }));
+    localStorage.setItem(FEED_CACHE_KEY, JSON.stringify(compact));
+  } catch {}
+}
+
 export const FeedPage: React.FC<FeedPageProps> = ({
   userUid,
   profile,
@@ -46,10 +74,10 @@ export const FeedPage: React.FC<FeedPageProps> = ({
   onOpenMyAds,
   onOpenDailyBonus,
 }) => {
-  const [ads, setAds] = useState<Ad[]>([]);
+  const [ads, setAds] = useState<Ad[]>(() => getCachedFeedAds());
   const [claimedAdIds, setClaimedAdIds] = useState<Set<string>>(new Set());
   const [hiddenAdIds, setHiddenAdIds] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => getCachedFeedAds().length === 0);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -59,7 +87,6 @@ export const FeedPage: React.FC<FeedPageProps> = ({
 
   // 1. Fetch live active ads
   useEffect(() => {
-    setLoading(true);
     const adsRef = collection(db, 'ads');
     // Fetch active & paused ads
     const q = query(
@@ -118,7 +145,9 @@ export const FeedPage: React.FC<FeedPageProps> = ({
           console.warn("Error parsing ad document:", doc.id, err);
         }
       });
+
       setAds(fetchedAds);
+      saveCachedFeedAds(fetchedAds);
       setLoading(false);
     }, (error) => {
       console.error("Error fetching live ads:", error);
@@ -297,9 +326,23 @@ export const FeedPage: React.FC<FeedPageProps> = ({
 
       {/* Feed List */}
       {loading ? (
-        <div className="py-10 text-center text-slate-500 space-y-2">
-          <RefreshCw className="w-6 h-6 mx-auto animate-spin text-orange-500" />
-          <p className="text-xs font-semibold">Loading live ads...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+          {[0, 1, 2, 3].map((idx) => (
+            <div
+              key={idx}
+              className="bg-white/80 border border-orange-100 rounded-3xl p-4 space-y-3 animate-pulse"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-slate-200/80 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-slate-200/80 rounded w-1/2" />
+                  <div className="h-2.5 bg-slate-100 rounded w-1/3" />
+                </div>
+              </div>
+              <div className="h-24 bg-slate-100 rounded-2xl w-full" />
+              <div className="h-9 bg-slate-200/70 rounded-xl w-full" />
+            </div>
+          ))}
         </div>
       ) : sortedFilteredAds.length === 0 ? (
         <div className="glass-card border border-orange-200/70 rounded-2xl p-6 text-center space-y-3 my-4">

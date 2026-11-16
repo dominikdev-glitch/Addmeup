@@ -1,6 +1,6 @@
 import React from 'react';
 import { Logo } from './Logo';
-import { Shield, FileText, ArrowLeft, Lock, Mail, Globe, CheckCircle2 } from 'lucide-react';
+import { Shield, FileText, ArrowLeft, Lock, Mail, Globe, CheckCircle2, MessageCircle } from 'lucide-react';
 
 interface LegalPageProps {
   page: 'privacy' | 'terms';
@@ -174,10 +174,15 @@ export const LegalPage: React.FC<LegalPageProps> = ({ page, onNavigate }) => {
                   <p>
                     If you have questions about this Privacy Policy or wish to request account data deletion, please contact us at:
                   </p>
-                  <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 px-4 py-2.5 rounded-xl text-xs font-extrabold text-orange-950">
-                    <Mail className="w-4 h-4 text-orange-600" />
-                    <span>Support Email: heisgag1@gmail.com</span>
-                  </div>
+                  <a
+                    href="https://wa.me/2349040464774?text=Hello%20AddMeUp%20Support"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs font-extrabold text-emerald-950 hover:bg-emerald-100 transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4 text-emerald-600" />
+                    <span>WhatsApp Support: +234 904 046 4774</span>
+                  </a>
                 </section>
               </div>
             </>
@@ -243,10 +248,15 @@ export const LegalPage: React.FC<LegalPageProps> = ({ page, onNavigate }) => {
                   <p>
                     For support inquiries, billing assistance, or abuse reports, please contact:
                   </p>
-                  <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 px-4 py-2.5 rounded-xl text-xs font-extrabold text-orange-950">
-                    <Mail className="w-4 h-4 text-orange-600" />
-                    <span>Support Email: heisgag1@gmail.com</span>
-                  </div>
+                  <a
+                    href="https://wa.me/2349040464774?text=Hello%20AddMeUp%20Support"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs font-extrabold text-emerald-950 hover:bg-emerald-100 transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4 text-emerald-600" />
+                    <span>WhatsApp Support: +234 904 046 4774</span>
+                  </a>
                 </section>
               </div>
             </>

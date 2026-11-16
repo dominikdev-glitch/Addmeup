@@ -28,6 +28,7 @@ interface AdminAdsPageProps {
   onDeleteAd: (ad: Ad) => Promise<void>;
   onPermanentDeleteAd: (ad: Ad) => Promise<void>;
   actionInProgress: string | null;
+  onToast?: (msg: string) => void;
 }
 
 export const AdminAdsPage: React.FC<AdminAdsPageProps> = ({
@@ -37,6 +38,7 @@ export const AdminAdsPage: React.FC<AdminAdsPageProps> = ({
   onDeleteAd,
   onPermanentDeleteAd,
   actionInProgress,
+  onToast,
 }) => {
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState<'all' | 'snapchat' | 'whatsapp'>('all');

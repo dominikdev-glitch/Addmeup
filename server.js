@@ -469,12 +469,15 @@ app.get(['/sitemap.xml', '/sitemap'], (_req, res) => {
   const sitemapDist = path.join(__dirname, 'dist', 'sitemap.xml');
   const sitemapPublic = path.join(__dirname, 'public', 'sitemap.xml');
   const filePath = fs.existsSync(sitemapDist) ? sitemapDist : sitemapPublic;
-  return res.sendFile(filePath, {
-    headers: {
-      'Content-Type': 'application/xml; charset=utf-8',
-      'X-Content-Type-Options': 'nosniff',
-    },
-  });
+  try {
+    const xmlContent = fs.readFileSync(filePath, 'utf-8');
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.status(200).send(xmlContent);
+  } catch (err) {
+    console.error('Error reading sitemap:', err);
+    return res.status(500).type('text/plain').send('Sitemap unavailable');
+  }
 });
 
 // Robots.txt for Search Crawlers

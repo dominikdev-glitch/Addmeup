@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   collection, 
   getDocs, 
+  onSnapshot,
   query, 
   limit, 
   orderBy, 
@@ -31,6 +32,7 @@ import { AdminUsersPage } from './admin/pages/AdminUsersPage';
 import { AdminAdsPage } from './admin/pages/AdminAdsPage';
 import { AdminClaimsPage } from './admin/pages/AdminClaimsPage';
 import { AdminReportsPage } from './admin/pages/AdminReportsPage';
+import { AdminSupportPage } from './admin/pages/AdminSupportPage';
 import { AdminSettingsPage } from './admin/pages/AdminSettingsPage';
 
 interface AdminPageProps {
@@ -48,7 +50,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     const hash = window.location.hash.replace('#', '');
     if (hash.startsWith('admin/')) {
       const page = hash.replace('admin/', '') as AdminTab;
-      const validTabs: AdminTab[] = ['overview', 'finances', 'users', 'ads', 'claims', 'reports', 'settings'];
+      const validTabs: AdminTab[] = ['overview', 'finances', 'users', 'ads', 'claims', 'reports', 'support', 'settings'];
       if (validTabs.includes(page)) return page;
     }
     return 'overview';
@@ -66,7 +68,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       const hash = window.location.hash.replace('#', '');
       if (hash.startsWith('admin/')) {
         const page = hash.replace('admin/', '') as AdminTab;
-        const validTabs: AdminTab[] = ['overview', 'finances', 'users', 'ads', 'claims', 'reports', 'settings'];
+        const validTabs: AdminTab[] = ['overview', 'finances', 'users', 'ads', 'claims', 'reports', 'support', 'settings'];
         if (validTabs.includes(page)) {
           setActiveTabState(page);
         }
@@ -99,6 +101,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // Claims state
   const [claims, setClaims] = useState<Claim[]>([]);
 
+  // Live support inbox waiting counter
+  const [awaitingSupportCount, setAwaitingSupportCount] = useState(0);
+
   // Action loading state
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
@@ -118,14 +123,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           creditBalance: Number(data.creditBalance || 0),
           isAdmin: Boolean(data.isAdmin),
           isBanned: Boolean(data.isBanned),
-          streakDays: Number(data.streakDays || 0),
-          lastStreakCheckin: data.lastStreakCheckin,
-          snapchatUsername: data.snapchatUsername,
-          whatsappNumber: data.whatsappNumber,
-          telegramUsername: data.telegramUsername,
-          bio: data.bio || '',
-          gender: data.gender || 'unspecified',
-          country: data.country || 'NG',
+          snapchatHandle: data.snapchatHandle || data.snapchatUsername || '',
+          whatsappNumber: data.whatsappNumber || '',
+          canonicalUid: data.canonicalUid || '',
+          linkedOriginalUid: data.linkedOriginalUid || '',
+          dailyStreak: Number(data.dailyStreak || 0),
+          lastDailyBonusDate: data.lastDailyBonusDate || '',
           createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
         } as UserProfile;
       });
@@ -209,6 +212,62 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
   useEffect(() => {
     fetchAdminData();
+  }, []);
+
+  // Live listener for support tickets awaiting agent reply
+  useEffect(() => {
+    let latestByUser = new Map<string, { sender: string; ts: number }>();
+    let chatStatuses = new Map<string, string>();
+
+    const recomputeWaiting = () => {
+      let waiting = 0;
+      latestByUser.forEach((info, uid) => {
+        const status = chatStatuses.get(uid);
+        if (status !== 'resolved' && info.sender === 'user') {
+          waiting += 1;
+        }
+      });
+      setAwaitingSupportCount(waiting);
+    };
+
+    const unsubMsgs = onSnapshot(
+      query(collection(db, 'support_messages'), limit(250)),
+      (snap) => {
+        const next = new Map<string, { sender: string; ts: number }>();
+        snap.forEach((docSnap) => {
+          const d = docSnap.data();
+          const uid = d.userId;
+          if (!uid) return;
+          const ts = d.createdAt?.toMillis ? d.createdAt.toMillis() : (Number(d.createdAt) || 0);
+          const prev = next.get(uid);
+          if (!prev || ts >= prev.ts) {
+            next.set(uid, { sender: d.sender || 'user', ts });
+          }
+        });
+        latestByUser = next;
+        recomputeWaiting();
+      },
+      (err) => console.warn('Support inbox count listener note:', err)
+    );
+
+    const unsubChats = onSnapshot(
+      query(collection(db, 'support_chats'), limit(200)),
+      (snap) => {
+        const next = new Map<string, string>();
+        snap.forEach((docSnap) => {
+          const d = docSnap.data();
+          if (d?.status) next.set(docSnap.id, d.status);
+        });
+        chatStatuses = next;
+        recomputeWaiting();
+      },
+      (err) => console.warn('Support chat status listener note:', err)
+    );
+
+    return () => {
+      unsubMsgs();
+      unsubChats();
+    };
   }, []);
 
   // Key KPI Metrics
@@ -429,6 +488,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         onExit={() => onNavigateTab('feed')}
         openReportsCount={stats.openReportsCount}
         pendingClaimsCount={stats.pendingClaimsCount}
+        awaitingSupportCount={awaitingSupportCount}
         totalUsersCount={stats.totalUsersCount}
         activeAdsCount={stats.activeAdsCount}
         grossRevenueNgn={financialStats.grossRevenueNgn}
@@ -503,6 +563,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             <AdminReportsPage
               reports={reports}
               onResolveReport={handleResolveReport}
+              actionInProgress={actionInProgress}
+            />
+          )}
+
+          {activeTab === 'support' && (
+            <AdminSupportPage
+              onToast={onToast}
+              users={users}
+              transactions={transactions}
+              onAdjustCredits={handleAdjustCredits}
               actionInProgress={actionInProgress}
             />
           )}

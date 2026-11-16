@@ -21,8 +21,11 @@ import {
   Copy,
   Check,
   Share2,
-  Flame
+  Flame,
+  Headphones,
+  Printer
 } from 'lucide-react';
+import { DepositReceiptModal, ReceiptData } from './DepositReceiptModal';
 
 interface WalletPageProps {
   userUid: string | null;
@@ -31,6 +34,7 @@ interface WalletPageProps {
   onViewAllTransactions: () => void;
   onRequireAuth: () => void;
   onToast: (msg: string) => void;
+  onOpenSupport?: () => void;
 }
 
 export const WalletPage: React.FC<WalletPageProps> = ({
@@ -40,9 +44,11 @@ export const WalletPage: React.FC<WalletPageProps> = ({
   onViewAllTransactions,
   onRequireAuth,
   onToast,
+  onOpenSupport,
 }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedReceipt, setSelectedReceipt] = useState<ReceiptData | null>(null);
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -551,6 +557,25 @@ export const WalletPage: React.FC<WalletPageProps> = ({
                           ₦{tx.amountNgn.toLocaleString('en-NG')}
                         </div>
                       )}
+                      {isDeposit && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReceipt({
+                            referenceId: tx.referenceId || tx.transactionId,
+                            amountNgn: tx.amountNgn || tx.amount * 10,
+                            credits: tx.amount,
+                            paymentMethod: tx.paymentMethod || 'Paystack Instant Payment',
+                            createdAt: tx.createdAt,
+                            userEmail: profile?.email,
+                            userId: userUid || undefined,
+                          })}
+                          className="mt-1 inline-flex items-center gap-1 text-[9px] font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100/80 px-1.5 py-0.5 rounded border border-orange-200 transition-colors"
+                          title="View official printable voucher"
+                        >
+                          <Printer className="w-2.5 h-2.5" />
+                          <span>Receipt</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -578,6 +603,33 @@ export const WalletPage: React.FC<WalletPageProps> = ({
             </div>
           )}
         </div>
+
+        {/* 24/7 Human Agent Support Assistance Card */}
+        <div className="glass-card border border-emerald-200/80 bg-gradient-to-r from-emerald-50/80 via-white to-emerald-50/50 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-xs shrink-0">
+              🎧
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h4 className="text-xs font-black text-slate-900">Need Deposit or Point Assistance?</h4>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">Chat directly with a real support agent on WhatsApp or submit a live ticket.</p>
+            </div>
+          </div>
+
+          {onOpenSupport && (
+            <button
+              type="button"
+              onClick={onOpenSupport}
+              className="w-full sm:w-auto px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-xs shrink-0 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Headphones className="w-3.5 h-3.5" />
+              <span>Live Support</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Deposit Modal */}
@@ -588,6 +640,16 @@ export const WalletPage: React.FC<WalletPageProps> = ({
         userEmail={profile?.email}
         onToast={onToast}
       />
+
+      {/* Official Transaction Voucher Modal */}
+      {selectedReceipt && (
+        <DepositReceiptModal
+          isOpen={!!selectedReceipt}
+          onClose={() => setSelectedReceipt(null)}
+          receipt={selectedReceipt}
+          onToast={onToast}
+        />
+      )}
     </div>
   );
 };
