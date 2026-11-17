@@ -16,13 +16,13 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Initialize Firestore with long-polling to prevent WebSocket timeouts in iframe environments
+// Initialize Firestore against the clean (default) database of addmeup-95897
 export const db = initializeFirestore(
   app,
   {
     experimentalForceLongPolling: true,
   },
-  firebaseConfigData.firestoreDatabaseId || '(default)'
+  '(default)'
 );
 
 export const auth = getAuth(app);

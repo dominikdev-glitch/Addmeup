@@ -68,8 +68,8 @@ export function getFirebaseAdmin() {
 
   if (serviceAccount && (serviceAccount.private_key || serviceAccount.privateKey)) {
     try {
-      const configDbId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-7d6410bf-88e4-4073-b340-23b636dd1b26';
-      const targetProjectId = serviceAccount.project_id || serviceAccount.projectId || process.env.FIREBASE_PROJECT_ID || 'gen-lang-client-0936491555';
+      const configDbId = process.env.FIRESTORE_DATABASE_ID || '(default)';
+      const targetProjectId = serviceAccount.project_id || serviceAccount.projectId || process.env.FIREBASE_PROJECT_ID || 'addmeup-95897';
 
       const existingApps = getApps();
       const app =
