@@ -964,7 +964,21 @@ export function useAuth() {
       if (!branded.fallbackToFirebaseClient && branded.error) {
         throw new Error(branded.error);
       }
-      await sendPasswordResetEmail(auth, cleanEmail);
+      try {
+        await sendPasswordResetEmail(auth, cleanEmail, {
+          url: `${window.location.origin}/`,
+          handleCodeInApp: false,
+        });
+      } catch (actionErr: any) {
+        if (
+          actionErr?.code === 'auth/unauthorized-continue-uri' ||
+          actionErr?.code === 'auth/invalid-continue-uri'
+        ) {
+          await sendPasswordResetEmail(auth, cleanEmail);
+        } else {
+          throw actionErr;
+        }
+      }
     } catch (err: any) {
       console.error('Password reset error:', err);
       if (err.code === 'auth/user-not-found') {
@@ -978,11 +992,24 @@ export function useAuth() {
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
-    if (!auth.currentUser || !auth.currentUser.email) {
-      throw new Error('Password updates require an active email session. Use Forgot Password to set a password.');
-    }
     if (!newPassword || newPassword.length < 6) {
       throw new Error('New password must be at least 6 characters long.');
+    }
+
+    // Attempt silent Firebase Auth credential link if signed in via Native Google OAuth
+    if (!auth.currentUser) {
+      const idToken = typeof window !== 'undefined' ? localStorage.getItem('addmeup_google_id_token') : null;
+      const accessToken = typeof window !== 'undefined' ? localStorage.getItem('addmeup_google_access_token') : null;
+      if (idToken || accessToken) {
+        try {
+          const cred = GoogleAuthProvider.credential(idToken || null, accessToken || null);
+          await signInWithCredential(auth, cred);
+        } catch {}
+      }
+    }
+
+    if (!auth.currentUser || !auth.currentUser.email) {
+      throw new Error('Please sign out and sign back in with Google or Email first so we can verify your session before setting a password.');
     }
 
     const hasPasswordProvider = auth.currentUser.providerData?.some(
@@ -1004,7 +1031,7 @@ export function useAuth() {
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         throw new Error('Current password is incorrect.');
       } else if (err.code === 'auth/requires-recent-login') {
-        throw new Error('For security, please sign out and sign back in (or use Send Reset Link) before changing your password.');
+        throw new Error('For security, please sign out and sign back in before updating your password.');
       } else if (err.code === 'auth/weak-password') {
         throw new Error('New password is too weak. Choose at least 6 characters.');
       }

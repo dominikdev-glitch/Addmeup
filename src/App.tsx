@@ -23,6 +23,7 @@ import { CheckCircle2, AlertCircle, X, RefreshCw, Headphones } from 'lucide-reac
 import { Ad } from './types';
 import { triggerSystemNotification } from './lib/pushNotifications';
 import { SupportModal } from './components/SupportModal';
+import { ResetPasswordModal } from './components/ResetPasswordModal';
 
 export default function App() {
   const {
@@ -96,6 +97,26 @@ export default function App() {
   const [pendingClaimsCount, setPendingClaimsCount] = useState(0);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [userAds, setUserAds] = useState<Ad[]>([]);
+  const [resetOobCode, setResetOobCode] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('mode') === 'resetPassword' && params.get('oobCode')) {
+      return params.get('oobCode');
+    }
+    return null;
+  });
+
+  const clearResetOobCode = () => {
+    setResetOobCode(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('mode');
+      url.searchParams.delete('oobCode');
+      url.searchParams.delete('apiKey');
+      url.searchParams.delete('lang');
+      window.history.replaceState({}, '', url.pathname + url.hash);
+    } catch {}
+  };
 
   // Monitor user's own ads
   useEffect(() => {
@@ -256,6 +277,15 @@ export default function App() {
             onSignInEmail={signInWithEmail}
             onSignUpEmail={signUpWithEmail}
             onSendPasswordReset={sendPasswordReset}
+          />
+        )}
+
+        {/* In-App Password Reset Link Handler */}
+        {resetOobCode && (
+          <ResetPasswordModal
+            oobCode={resetOobCode}
+            onClose={clearResetOobCode}
+            onSuccessSignIn={() => setShowAuthModal(true)}
           />
         )}
       </>
@@ -497,6 +527,15 @@ export default function App() {
           onSignInEmail={signInWithEmail}
           onSignUpEmail={signUpWithEmail}
           onSendPasswordReset={sendPasswordReset}
+        />
+      )}
+
+      {/* In-App Password Reset Link Handler */}
+      {resetOobCode && (
+        <ResetPasswordModal
+          oobCode={resetOobCode}
+          onClose={clearResetOobCode}
+          onSuccessSignIn={() => setShowAuthModal(true)}
         />
       )}
 

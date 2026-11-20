@@ -204,6 +204,16 @@ export const AdminSettingsPage: React.FC<AdminSettingsPageProps> = ({
             </div>
           )}
 
+          {!healthStatus.loading && !healthStatus.firebaseAdmin && (
+            <p className="text-[11px] text-amber-300/90 leading-relaxed">
+              Note: <code className="text-amber-200">FIREBASE_ADMIN_JSON</code> is not set yet, so Password Reset links use Firebase&apos;s default emailer instead of <code className="text-amber-200">security@addmeup.ng</code> via Resend (and Google-only users require Firebase Admin SDK to generate reset links cleanly).
+            </p>
+          )}
+
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Gmail inbox avatar note: Your AddMeUp logo renders inside all opened emails cleanly. To replace the red &ldquo;A&rdquo; circle in the Gmail inbox list, configure DMARC (<code className="text-slate-300">p=quarantine</code>) + a BIMI DNS TXT record pointing to <code className="text-slate-300">https://addmeup.ng/bimi-logo.svg</code> with a VMC/CMC certificate.
+          </p>
+
           {!healthStatus.loading && !healthStatus.resendEmail && (
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Next step: Copy your <strong className="text-slate-200">re_...</strong> API key from Resend Dashboard → API Keys and add it as <code className="text-amber-300">RESEND_API_KEY</code> in your Render Environment Variables (then redeploy <code className="text-slate-200">addmeup.ng</code>). Welcome, Deposit Receipt, Withdrawal, Password Reset, and Password Change emails will automatically send.

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>AddMeUp</title>
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="#ea580c"/>
+  <rect x="16" y="16" width="224" height="224" rx="44" fill="#f97316"/>
+  <path d="M128 50 L62 204 L92 204 L106 168 L150 168 L164 204 L194 204 Z" fill="#ffffff"/>
+  <rect x="118" y="106" width="20" height="44" rx="4" fill="#ea580c"/>
+  <rect x="106" y="118" width="44" height="20" rx="4" fill="#ea580c"/>
+</svg>

@@ -118,18 +118,43 @@ app.post('/api/auth/password-reset', async (req, res) => {
   }
 
   const hasResend = Boolean((process.env.RESEND_API_KEY || '').trim());
-  const { auth: admAuth, isConfigured } = getFirebaseAdmin();
+  const { auth: admAuth, db: admDb, isConfigured } = getFirebaseAdmin();
 
   // Require both Firebase Admin SDK (to generate official reset link) & Resend API Key
   if (!hasResend || !isConfigured || !admAuth) {
     return res.json({
       success: false,
       fallbackToFirebaseClient: true,
+      missingAdminSdk: !isConfigured || !admAuth,
       message: 'Server reset email not configured; using Firebase default.',
     });
   }
 
   try {
+    // Ensure users who originally signed up via Native Google OAuth also have a Firebase Auth record for password setting
+    try {
+      await admAuth.getUserByEmail(email);
+    } catch (lookupErr) {
+      if (lookupErr?.code === 'auth/user-not-found' && admDb) {
+        const fsSnap = await admDb.collection('users').where('email', '==', email).limit(1).get();
+        if (!fsSnap.empty) {
+          const userData = fsSnap.docs[0].data();
+          await admAuth.createUser({
+            email,
+            emailVerified: true,
+            displayName: userData?.username || email.split('@')[0],
+          });
+        } else {
+          return res.status(404).json({
+            success: false,
+            message: 'No AddMeUp account found with this email address.',
+          });
+        }
+      } else {
+        throw lookupErr;
+      }
+    }
+
     const resetLink = await admAuth.generatePasswordResetLink(email, {
       url: 'https://addmeup.ng/',
     });
@@ -151,7 +176,7 @@ app.post('/api/auth/password-reset', async (req, res) => {
     if (err?.code === 'auth/user-not-found') {
       return res.status(404).json({
         success: false,
-        message: 'No password-based account found with this email. Try signing in with Google.',
+        message: 'No account found with this email. Please create an account or sign in with Google.',
       });
     }
     return res.json({
