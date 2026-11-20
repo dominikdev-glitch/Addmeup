@@ -3,15 +3,18 @@ import {
   doc, 
   collection, 
   serverTimestamp,
+  getDoc,
   getDocs,
   query,
   where,
   limit as fsLimit,
   updateDoc,
   deleteDoc,
-  increment
+  increment,
+  writeBatch,
+  DocumentReference
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { 
   PlatformType, 
   CategoryType, 
@@ -20,7 +23,8 @@ import {
   BoostPackage,
   DepositPackage,
   ReportReason,
-  AdReport
+  AdReport,
+  UserProfile
 } from '../types';
 import { sendNotification } from './notifications';
 import { notifyDepositEmail } from './emails';
@@ -1323,5 +1327,177 @@ export async function adminForceApproveClaim(claimId: string): Promise<void> {
     });
   });
 }
+
+export interface AdminDeleteUserResult {
+  deletedDocsCount: number;
+  authDeletedCount: number;
+  authDeleted: boolean;
+  deletedUids: string[];
+}
+
+/**
+ * ADMIN: Permanently delete a user's Firestore documents across all collections
+ * and delete their Firebase Auth account(s) via backend Admin SDK when configured.
+ */
+export async function adminPermanentDeleteUser(
+  targetUser: UserProfile
+): Promise<AdminDeleteUserResult> {
+  if (!targetUser?.uid) {
+    throw new Error('Target user UID is missing.');
+  }
+
+  const normalizedEmail = (targetUser.email || '').trim().toLowerCase();
+  if (normalizedEmail === 'heisgag1@gmail.com') {
+    throw new Error('Cannot delete the super-admin account.');
+  }
+
+  // Gather caller auth tokens (Firebase ID Token + Native Google OAuth tokens)
+  let firebaseIdToken = '';
+  try {
+    if (auth.currentUser) {
+      firebaseIdToken = await auth.currentUser.getIdToken();
+    }
+  } catch {
+    // Ignore token fetch errors; fallback to Google OAuth tokens if available
+  }
+
+  let googleIdToken = '';
+  let googleAccessToken = '';
+  try {
+    googleIdToken = localStorage.getItem('addmeup_google_id_token') || '';
+    googleAccessToken = localStorage.getItem('addmeup_google_access_token') || '';
+    if (!googleIdToken || !googleAccessToken) {
+      const nativeRaw = localStorage.getItem('addmeup_native_google_user');
+      if (nativeRaw) {
+        const parsed = JSON.parse(nativeRaw);
+        if (!googleIdToken && parsed?.idToken) googleIdToken = String(parsed.idToken);
+        if (!googleAccessToken && parsed?.accessToken) googleAccessToken = String(parsed.accessToken);
+      }
+    }
+  } catch {
+    // Ignore localStorage access issues
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const bearer = firebaseIdToken || googleIdToken;
+  if (bearer) {
+    headers['Authorization'] = `Bearer ${bearer}`;
+  }
+  if (googleAccessToken) {
+    headers['X-Google-Access-Token'] = googleAccessToken;
+  }
+
+  // Attempt server-side deletion (handles immutable transactions + Firebase Auth)
+  try {
+    const response = await fetch('/api/admin/delete-user', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        targetUid: targetUser.uid,
+        targetEmail: normalizedEmail,
+      }),
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (response.ok && data?.success) {
+      return {
+        deletedDocsCount: Number(data.deletedDocsCount || 0),
+        authDeletedCount: Number(data.authDeletedCount || 0),
+        authDeleted: true,
+        deletedUids: Array.isArray(data.deletedUids) && data.deletedUids.length > 0
+          ? data.deletedUids
+          : [targetUser.uid],
+      };
+    }
+
+    if (!response.ok && !data?.needsClientDeletion) {
+      throw new Error(data?.message || `Server returned ${response.status} while deleting user.`);
+    }
+  } catch (err: any) {
+    // Re-throw explicit API rejections (400/401/403/500 with specific message);
+    // only fall back to client deletion if server lacks Admin SDK or is unreachable.
+    if (err?.message && !String(err.message).includes('Failed to fetch')) {
+      throw err;
+    }
+  }
+
+  // Client-side Firestore cascade purge fallback (when FIREBASE_ADMIN_JSON is not set)
+  const candidateUids = new Set<string>([targetUser.uid]);
+  if (targetUser.canonicalUid) candidateUids.add(targetUser.canonicalUid);
+  if (targetUser.linkedOriginalUid) candidateUids.add(targetUser.linkedOriginalUid);
+
+  if (normalizedEmail && normalizedEmail.includes('@')) {
+    try {
+      const emailSnap = await getDocs(
+        query(collection(db, 'users'), where('email', '==', normalizedEmail))
+      );
+      emailSnap.forEach((d) => {
+        candidateUids.add(d.id);
+        const data = d.data();
+        if (data?.canonicalUid) candidateUids.add(String(data.canonicalUid));
+        if (data?.linkedOriginalUid) candidateUids.add(String(data.linkedOriginalUid));
+      });
+    } catch (e) {
+      console.warn('[Admin Delete User] Email lookup note:', e);
+    }
+  }
+
+  const docRefsMap = new Map<string, DocumentReference>();
+  const trackSnap = (snap: { forEach: (cb: (d: { ref: DocumentReference }) => void) => void }) => {
+    snap.forEach((d) => {
+      docRefsMap.set(d.ref.path, d.ref);
+    });
+  };
+
+  for (const uid of candidateUids) {
+    const userDocRef = doc(db, 'users', uid);
+    const supportChatDocRef = doc(db, 'support_chats', uid);
+
+    const [userSnap, chatSnap, ...querySnaps] = await Promise.all([
+      getDoc(userDocRef),
+      getDoc(supportChatDocRef),
+      getDocs(query(collection(db, 'ads'), where('userId', '==', uid))),
+      getDocs(query(collection(db, 'claims'), where('claimerUid', '==', uid))),
+      getDocs(query(collection(db, 'claims'), where('adOwnerUid', '==', uid))),
+      getDocs(query(collection(db, 'notifications'), where('userId', '==', uid))),
+      getDocs(query(collection(db, 'ad_likes'), where('userId', '==', uid))),
+      getDocs(query(collection(db, 'reports'), where('reporterUid', '==', uid))),
+      getDocs(query(collection(db, 'reports'), where('reportedUserId', '==', uid))),
+      getDocs(query(collection(db, 'support_messages'), where('userId', '==', uid))),
+      getDocs(query(collection(db, 'support_chats'), where('userId', '==', uid))),
+    ]);
+
+    if (userSnap.exists()) {
+      docRefsMap.set(userDocRef.path, userDocRef);
+    }
+    if (chatSnap.exists()) {
+      docRefsMap.set(supportChatDocRef.path, supportChatDocRef);
+    }
+    querySnaps.forEach(trackSnap);
+  }
+
+  // Note: transactions collection forbids client delete in firestore.rules,
+  // so it is omitted from client batches and purged via Admin SDK when configured.
+  const allRefs = Array.from(docRefsMap.values());
+  let deletedDocsCount = 0;
+  for (let i = 0; i < allRefs.length; i += 400) {
+    const chunk = allRefs.slice(i, i + 400);
+    const batch = writeBatch(db);
+    chunk.forEach((ref) => batch.delete(ref));
+    await batch.commit();
+    deletedDocsCount += chunk.length;
+  }
+
+  return {
+    deletedDocsCount,
+    authDeletedCount: 0,
+    authDeleted: false,
+    deletedUids: Array.from(candidateUids),
+  };
+}
+
 
 

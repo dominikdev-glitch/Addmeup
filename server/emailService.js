@@ -12,6 +12,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const DEFAULT_FROM_GENERAL = process.env.RESEND_FROM_EMAIL || 'AddMeUp <noreply@addmeup.ng>';
+const DEFAULT_FROM_PARTNERSHIPS = process.env.RESEND_FROM_PARTNERSHIPS || 'AddMeUp Partnerships <partnerships@addmeup.ng>';
+const DEFAULT_FROM_SUPPORT = process.env.RESEND_FROM_SUPPORT || 'AddMeUp Support <support@addmeup.ng>';
 const DEFAULT_FROM_RECEIPTS = process.env.RESEND_FROM_RECEIPTS || 'AddMeUp Receipts <receipts@addmeup.ng>';
 const DEFAULT_FROM_SECURITY = process.env.RESEND_FROM_SECURITY || 'AddMeUp Security <security@addmeup.ng>';
 const DEFAULT_REPLY_TO = process.env.RESEND_REPLY_TO || 'heisgag1@gmail.com';
@@ -156,14 +158,23 @@ function wrapEmailLayout({
           <tr>
             <td bgcolor="#f8fafc" style="background-color:#f8fafc;border-top:1px solid #e2e8f0;padding:18px 28px;text-align:center;">
               <p style="margin:0 0 6px;font-size:12px;color:#475569;font-weight:600;">
-                Need assistance? WhatsApp Support: <strong style="color:#0f172a;">+234 904 046 4774</strong>
+                Support: <a href="mailto:support@addmeup.ng" style="color:#ea580c;text-decoration:none;font-weight:700;">support@addmeup.ng</a>
+                &nbsp;&bull;&nbsp;
+                WhatsApp: <strong style="color:#0f172a;">+234 904 046 4774</strong>
               </p>
               <p style="margin:0 0 6px;font-size:11px;color:#64748b;">
-                <a href="https://addmeup.ng" style="color:#ea580c;text-decoration:none;font-weight:700;">addmeup.ng</a>
-                &nbsp;&bull;&nbsp; Social Handle Growth &amp; Rewards Platform
+                <a href="https://addmeup.ng" style="color:#ea580c;text-decoration:none;font-weight:700;">Home</a>
+                &nbsp;&bull;&nbsp;
+                <a href="https://addmeup.ng/about" style="color:#475569;text-decoration:none;font-weight:600;">About</a>
+                &nbsp;&bull;&nbsp;
+                <a href="https://addmeup.ng/partnership" style="color:#475569;text-decoration:none;font-weight:600;">Partnerships</a>
+                &nbsp;&bull;&nbsp;
+                <a href="https://addmeup.ng/contact" style="color:#475569;text-decoration:none;font-weight:600;">Contact</a>
+                &nbsp;&bull;&nbsp;
+                <a href="https://addmeup.ng/privacy" style="color:#475569;text-decoration:none;font-weight:600;">Privacy</a>
               </p>
               <p style="margin:0;font-size:10px;color:#94a3b8;">
-                Sent securely from our verified domain <strong style="color:#64748b;">addmeup.ng</strong>
+                Sent securely from our verified domain <strong style="color:#64748b;">addmeup.ng</strong> &bull; Partnerships: partnerships@addmeup.ng
               </p>
             </td>
           </tr>
@@ -644,3 +655,135 @@ export async function sendTestResendEmail({
     html,
   });
 }
+
+/**
+ * 6. Partnership & Contact Form Inquiry Notification + Auto-Confirmation
+ */
+export async function sendInquiryNotificationEmail({
+  name,
+  email,
+  category = 'general',
+  organization = '',
+  handle = '',
+  budgetOrReach = '',
+  message,
+}) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanName = String(name || 'Visitor').trim();
+  const cleanMessage = String(message || '').trim();
+
+  if (!cleanEmail || !cleanEmail.includes('@') || !cleanMessage) {
+    return { sent: false, autoReplySent: false, reason: 'Valid email and message are required.' };
+  }
+
+  const categoryLabels = {
+    partnership: 'Brand Partnership / Sponsorship',
+    creator: 'Creator & Snap Star Collaboration',
+    ambassador: 'Campus & Community Ambassador',
+    support: 'Member Support Request',
+    billing: 'Billing & Deposit Inquiry',
+    general: 'General Inquiry',
+  };
+  const categoryTitle = categoryLabels[category] || 'Website Inquiry';
+  const isPartnership = ['partnership', 'creator', 'ambassador'].includes(category);
+  const targetInbox = process.env.INQUIRY_RECIPIENT_EMAIL || DEFAULT_REPLY_TO;
+  const senderAddress = isPartnership ? DEFAULT_FROM_PARTNERSHIPS : DEFAULT_FROM_SUPPORT;
+
+  // 1) Notify AddMeUp Admin / Desk
+  const adminHtml = wrapEmailLayout({
+    title: `New ${categoryTitle} — ${cleanName}`,
+    preheader: `${cleanName} submitted a ${categoryTitle} on addmeup.ng.`,
+    subtitle: isPartnership ? 'Partnerships & Growth Desk' : 'Support & Contact Desk',
+    badgeText: categoryTitle,
+    badgeBg: isPartnership ? '#fff7ed' : '#f1f5f9',
+    badgeColor: isPartnership ? '#c2410c' : '#334155',
+    badgeBorder: isPartnership ? '#fed7aa' : '#cbd5e1',
+    bodyHtml: `
+      <h1 style="font-size:19px;font-weight:900;color:#0f172a;margin:0 0 12px;">New inquiry from ${escapeHtml(cleanName)}</h1>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="font-size:13px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-bottom:18px;">
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#64748b;background-color:#f8fafc;">Name</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#0f172a;">${escapeHtml(cleanName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#64748b;background-color:#f8fafc;">Reply Email</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#ea580c;">${escapeHtml(cleanEmail)}</td>
+        </tr>
+        ${organization ? `
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#64748b;background-color:#f8fafc;">Brand / Organization</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#0f172a;">${escapeHtml(organization)}</td>
+        </tr>` : ''}
+        ${handle ? `
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#64748b;background-color:#f8fafc;">Social Handle / Phone</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#0f172a;font-family:monospace;">${escapeHtml(handle)}</td>
+        </tr>` : ''}
+        ${budgetOrReach ? `
+        <tr>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#64748b;background-color:#f8fafc;">Reach / Budget</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:700;color:#0f172a;">${escapeHtml(budgetOrReach)}</td>
+        </tr>` : ''}
+      </table>
+
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+        <tr>
+          <td style="padding:16px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;font-size:13px;line-height:1.65;color:#1e293b;">
+            <strong style="display:block;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Message</strong>
+            ${escapeHtml(cleanMessage).replace(/\n/g, '<br/>')}
+          </td>
+        </tr>
+      </table>
+    `,
+  });
+
+  const adminResult = await sendResendEmail({
+    from: senderAddress,
+    to: targetInbox,
+    replyTo: cleanEmail,
+    subject: `[AddMeUp ${categoryTitle}] ${cleanName}${organization ? ` (${organization})` : ''}`,
+    html: adminHtml,
+  });
+
+  // 2) Send branded auto-confirmation back to the requester
+  const autoConfirmHtml = wrapEmailLayout({
+    title: 'We Received Your Message — AddMeUp',
+    preheader: `Thank you for reaching out to AddMeUp (${categoryTitle}).`,
+    subtitle: isPartnership ? 'Partnerships Team' : 'Support Team',
+    badgeText: 'Request Received',
+    badgeBg: '#ecfdf5',
+    badgeColor: '#047857',
+    badgeBorder: '#a7f3d0',
+    bodyHtml: `
+      <h1 style="font-size:19px;font-weight:900;color:#0f172a;margin:0 0 10px;">Thanks for reaching out, ${escapeHtml(cleanName)}</h1>
+      <p style="font-size:14px;line-height:1.65;color:#475569;margin:0 0 16px;">
+        We've received your <strong>${escapeHtml(categoryTitle)}</strong> inquiry and routed it to our team. Our ${isPartnership ? 'partnerships desk' : 'support team'} responds within 24 hours.
+      </p>
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom:18px;">
+        <tr>
+          <td style="padding:14px 16px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;font-size:12px;line-height:1.6;color:#475569;">
+            <strong>Your Copy:</strong><br/>
+            ${escapeHtml(cleanMessage).replace(/\n/g, '<br/>')}
+          </td>
+        </tr>
+      </table>
+      <p style="font-size:13px;line-height:1.6;color:#64748b;margin:0;">
+        Need an urgent reply? Chat with us directly on WhatsApp at <strong>+234 904 046 4774</strong> or email <a href="mailto:${isPartnership ? 'partnerships@addmeup.ng' : 'support@addmeup.ng'}" style="color:#ea580c;font-weight:700;">${isPartnership ? 'partnerships@addmeup.ng' : 'support@addmeup.ng'}</a>.
+      </p>
+    `,
+  });
+
+  const replyResult = await sendResendEmail({
+    from: senderAddress,
+    to: cleanEmail,
+    subject: `We received your ${categoryTitle} — AddMeUp`,
+    html: autoConfirmHtml,
+  });
+
+  return {
+    sent: Boolean(adminResult.sent),
+    autoReplySent: Boolean(replyResult.sent),
+    reason: adminResult.reason || replyResult.reason,
+  };
+}
+

@@ -11,7 +11,8 @@ import {
   Sparkles, 
   ExternalLink,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  Mail
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { 
@@ -320,6 +321,34 @@ export const SupportModal: React.FC<SupportModalProps> = ({
               <span>Open WhatsApp Chat with Real Agent</span>
               <ExternalLink className="w-3.5 h-3.5 ml-1 opacity-70" />
             </button>
+
+            {/* Official Email Desks */}
+            <div className="pt-2 border-t border-slate-100 space-y-2">
+              <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-orange-500" />
+                <span>Official Email Desks (addmeup.ng)</span>
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                <a
+                  href="mailto:support@addmeup.ng"
+                  className="px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-orange-50 border border-slate-200 font-bold text-slate-700 hover:text-orange-700 truncate transition-colors"
+                >
+                  support@addmeup.ng
+                </a>
+                <a
+                  href="mailto:receipts@addmeup.ng"
+                  className="px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-orange-50 border border-slate-200 font-bold text-slate-700 hover:text-orange-700 truncate transition-colors"
+                >
+                  receipts@addmeup.ng
+                </a>
+                <a
+                  href="mailto:partnerships@addmeup.ng"
+                  className="px-2.5 py-2 rounded-xl bg-slate-50 hover:bg-orange-50 border border-slate-200 font-bold text-slate-700 hover:text-orange-700 truncate transition-colors"
+                >
+                  partnerships@addmeup.ng
+                </a>
+              </div>
+            </div>
           </div>
         )}
 

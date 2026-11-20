@@ -17,7 +17,9 @@ import {
   Phone,
   Mail,
   UserCheck,
-  UserX
+  UserX,
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import { UserProfile } from '../../../types';
 import { getEffectiveAvatar } from '../../../lib/avatar';
@@ -25,18 +27,22 @@ import { AdminPagination } from '../AdminPagination';
 
 interface AdminUsersPageProps {
   users: UserProfile[];
+  currentProfile?: UserProfile;
   onToggleAdmin: (user: UserProfile) => Promise<void>;
   onToggleBan: (user: UserProfile) => Promise<void>;
   onAdjustCredits: (user: UserProfile, amount: number, reason: string) => Promise<void>;
+  onDeleteUser: (user: UserProfile) => Promise<void>;
   actionInProgress: string | null;
   onToast: (msg: string) => void;
 }
 
 export const AdminUsersPage: React.FC<AdminUsersPageProps> = ({
   users,
+  currentProfile,
   onToggleAdmin,
   onToggleBan,
   onAdjustCredits,
+  onDeleteUser,
   actionInProgress,
   onToast,
 }) => {
@@ -52,6 +58,12 @@ export const AdminUsersPage: React.FC<AdminUsersPageProps> = ({
   const [selectedUserForCredit, setSelectedUserForCredit] = useState<UserProfile | null>(null);
   const [creditAmount, setCreditAmount] = useState<number>(50);
   const [creditReason, setCreditReason] = useState<string>('Admin bonus');
+
+  // Delete confirmation modal state
+  const [userPendingDelete, setUserPendingDelete] = useState<UserProfile | null>(null);
+
+  const isProtectedAdmin = (u: UserProfile) =>
+    u.uid === currentProfile?.uid || (u.email || '').trim().toLowerCase() === 'heisgag1@gmail.com';
 
   // Filtered users
   const filteredUsers = users.filter(u => {
@@ -312,6 +324,17 @@ export const AdminUsersPage: React.FC<AdminUsersPageProps> = ({
                         >
                           {u.isBanned ? 'Unban' : 'Ban'}
                         </button>
+
+                        {!isProtectedAdmin(u) && (
+                          <button
+                            onClick={() => setUserPendingDelete(u)}
+                            disabled={isWorking}
+                            title="Permanently Delete User & All Data"
+                            className="p-1.5 rounded-xl bg-rose-950/60 hover:bg-rose-600 text-rose-400 hover:text-white border border-rose-800/60 transition-all disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -463,6 +486,20 @@ export const AdminUsersPage: React.FC<AdminUsersPageProps> = ({
                 {inspectingUser.isBanned ? 'Unban Account' : 'Ban Account'}
               </button>
             </div>
+
+            {!isProtectedAdmin(inspectingUser) && (
+              <button
+                onClick={() => {
+                  const target = inspectingUser;
+                  setInspectingUser(null);
+                  setUserPendingDelete(target);
+                }}
+                className="w-full py-2.5 px-3 bg-rose-950/70 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-800/70 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete User, All Documents &amp; Auth</span>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -550,6 +587,74 @@ export const AdminUsersPage: React.FC<AdminUsersPageProps> = ({
                 className="py-2.5 px-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95"
               >
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete User Confirmation Modal */}
+      {userPendingDelete && (
+        <div
+          onClick={() => actionInProgress !== userPendingDelete.uid && setUserPendingDelete(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl text-white"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-white">Permanently Delete User?</h4>
+                  <p className="text-xs text-slate-400">
+                    {userPendingDelete.username} ({userPendingDelete.email || userPendingDelete.uid})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setUserPendingDelete(null)}
+                disabled={actionInProgress === userPendingDelete.uid}
+                className="p-1 rounded-xl bg-slate-800 text-slate-400 hover:text-white disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-rose-950/40 border border-rose-800/50 text-xs text-rose-200 leading-relaxed space-y-1.5">
+              <p className="font-bold text-rose-300">This action cannot be undone.</p>
+              <p className="text-slate-300">
+                Deletes their user profile, ads, claims, likes, notifications, reports, support chats, transaction records (when Admin SDK is active), and Firebase Auth login.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                onClick={() => setUserPendingDelete(null)}
+                disabled={actionInProgress === userPendingDelete.uid}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const target = userPendingDelete;
+                  await onDeleteUser(target);
+                  setUserPendingDelete(null);
+                }}
+                disabled={actionInProgress === userPendingDelete.uid}
+                className="py-2.5 px-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+              >
+                {actionInProgress === userPendingDelete.uid ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete Permanently</span>
+                )}
               </button>
             </div>
           </div>

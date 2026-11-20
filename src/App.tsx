@@ -15,6 +15,8 @@ import { BoostModal } from './components/BoostModal';
 import { AuthModal } from './components/AuthModal';
 import { AdminPage } from './components/AdminPage';
 import { LegalPage } from './components/LegalPage';
+import { PublicInfoPages } from './components/PublicInfoPages';
+import { PublicPageId } from './lib/contactConfig';
 import { MobileInstallPrompt } from './components/MobileInstallPrompt';
 import { Logo } from './components/Logo';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
@@ -41,11 +43,32 @@ export default function App() {
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'feed' | 'post' | 'verifications' | 'wallet' | 'transactions' | 'admin'>('feed');
-  const [legalPage, setLegalPage] = useState<'privacy' | 'terms' | null>(() => {
+  const resolvePublicRoute = (): PublicPageId | null => {
     if (typeof window === 'undefined') return null;
     const path = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
     const search = new URLSearchParams(window.location.search).get('page')?.toLowerCase();
+
+    if (path === '/about' || path === '/about-us' || hash === '#/about' || search === 'about') {
+      return 'about';
+    }
+    if (
+      path === '/partnership' ||
+      path === '/partnerships' ||
+      path === '/partner' ||
+      hash === '#/partnership' ||
+      hash === '#/partnerships' ||
+      search === 'partnership' ||
+      search === 'partnerships'
+    ) {
+      return 'partnership';
+    }
+    if (path === '/contact' || path === '/emails' || hash === '#/contact' || search === 'contact') {
+      return 'contact';
+    }
+    if (path === '/faq' || path === '/help' || hash === '#/faq' || search === 'faq') {
+      return 'faq';
+    }
     if (path === '/privacy' || path === '/privacy-policy' || hash === '#/privacy' || search === 'privacy') {
       return 'privacy';
     }
@@ -53,36 +76,30 @@ export default function App() {
       return 'terms';
     }
     return null;
-  });
+  };
+
+  const [publicPage, setPublicPage] = useState<PublicPageId | null>(resolvePublicRoute);
 
   useEffect(() => {
-    const syncLegalRoute = () => {
-      const path = window.location.pathname.toLowerCase();
-      const hash = window.location.hash.toLowerCase();
-      const search = new URLSearchParams(window.location.search).get('page')?.toLowerCase();
-      if (path === '/privacy' || path === '/privacy-policy' || hash === '#/privacy' || search === 'privacy') {
-        setLegalPage('privacy');
-      } else if (path === '/terms' || path === '/terms-of-service' || hash === '#/terms' || search === 'terms') {
-        setLegalPage('terms');
-      } else {
-        setLegalPage(null);
-      }
+    const syncPublicRoute = () => {
+      setPublicPage(resolvePublicRoute());
     };
-    window.addEventListener('popstate', syncLegalRoute);
-    window.addEventListener('hashchange', syncLegalRoute);
+    window.addEventListener('popstate', syncPublicRoute);
+    window.addEventListener('hashchange', syncPublicRoute);
     return () => {
-      window.removeEventListener('popstate', syncLegalRoute);
-      window.removeEventListener('hashchange', syncLegalRoute);
+      window.removeEventListener('popstate', syncPublicRoute);
+      window.removeEventListener('hashchange', syncPublicRoute);
     };
   }, []);
 
-  const navigateLegal = (target: 'home' | 'privacy' | 'terms') => {
+  const navigatePublicPage = (target: 'home' | PublicPageId) => {
     if (target === 'home') {
       window.history.pushState({}, '', '/');
-      setLegalPage(null);
+      setPublicPage(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       window.history.pushState({}, '', `/${target}`);
-      setLegalPage(target);
+      setPublicPage(target);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -238,9 +255,33 @@ export default function App() {
     }, 4000);
   };
 
-  // Render Public Legal Pages (/privacy & /terms) immediately without requiring login
-  if (legalPage) {
-    return <LegalPage page={legalPage} onNavigate={navigateLegal} />;
+  // Render Public Info & Legal Pages (/about, /partnership, /contact, /faq, /privacy, /terms)
+  if (publicPage === 'privacy' || publicPage === 'terms') {
+    return (
+      <LegalPage
+        page={publicPage}
+        onNavigate={navigatePublicPage}
+        onPrimaryCta={() => {
+          navigatePublicPage('home');
+          if (!user) setShowAuthModal(true);
+        }}
+        primaryCtaLabel={user ? 'Back to App' : 'Get Started'}
+      />
+    );
+  }
+
+  if (publicPage) {
+    return (
+      <PublicInfoPages
+        page={publicPage}
+        onNavigate={navigatePublicPage}
+        onPrimaryCta={() => {
+          navigatePublicPage('home');
+          if (!user) setShowAuthModal(true);
+        }}
+        primaryCtaLabel={user ? 'Back to App' : 'Get Started'}
+      />
+    );
   }
 
   // If initial auth is still checking
@@ -265,8 +306,9 @@ export default function App() {
         <LandingPage
           onSignInGoogle={signInWithGoogle}
           onOpenAuthModal={() => setShowAuthModal(true)}
-          onOpenPrivacy={() => navigateLegal('privacy')}
-          onOpenTerms={() => navigateLegal('terms')}
+          onNavigatePage={navigatePublicPage}
+          onOpenPrivacy={() => navigatePublicPage('privacy')}
+          onOpenTerms={() => navigatePublicPage('terms')}
         />
 
         {/* Auth Modal */}
@@ -561,6 +603,80 @@ export default function App() {
         >
           <Headphones className="w-5 h-5 text-white group-hover:rotate-6 transition-transform" />
         </button>
+      )}
+
+      {/* Subtle App Footer Links (hidden in Admin Console) */}
+      {activeTab !== 'admin' && (
+        <footer className="border-t border-orange-100/80 bg-white/50 py-4 px-4 text-center text-[11px] text-slate-500">
+          <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-x-4 gap-y-1 font-semibold">
+            <a
+              href="/about"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicPage('about');
+              }}
+              className="hover:text-orange-600 transition-colors"
+            >
+              About
+            </a>
+            <a
+              href="/partnership"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicPage('partnership');
+              }}
+              className="hover:text-orange-600 transition-colors"
+            >
+              Partnerships
+            </a>
+            <a
+              href="/faq"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicPage('faq');
+              }}
+              className="hover:text-orange-600 transition-colors"
+            >
+              FAQ
+            </a>
+            <a
+              href="/contact"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicPage('contact');
+              }}
+              className="hover:text-orange-600 transition-colors"
+            >
+              Contact &amp; Emails
+            </a>
+            <a
+              href="/privacy"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicPage('privacy');
+              }}
+              className="hover:text-orange-600 transition-colors"
+            >
+              Privacy
+            </a>
+            <a
+              href="/terms"
+              onClick={(e) => {
+                e.preventDefault();
+                navigatePublicPage('terms');
+              }}
+              className="hover:text-orange-600 transition-colors"
+            >
+              Terms
+            </a>
+            <a
+              href="mailto:support@addmeup.ng"
+              className="text-orange-600 hover:underline"
+            >
+              support@addmeup.ng
+            </a>
+          </div>
+        </footer>
       )}
 
       {/* Native Mobile PWA Install Prompt Banner */}

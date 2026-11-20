@@ -19,6 +19,7 @@ import {
   sendPasswordResetResendEmail,
   sendPasswordChangedEmail,
   sendTestResendEmail,
+  sendInquiryNotificationEmail,
 } from './server/emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -205,6 +206,261 @@ app.post('/api/email/test', async (req, res) => {
     hasResendKey,
     ...result,
   });
+});
+
+app.post('/api/contact/inquiry', async (req, res) => {
+  const { name, email, category, organization, handle, budgetOrReach, message } = req.body || {};
+  const cleanName = String(name || '').trim();
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  const cleanMessage = String(message || '').trim();
+
+  if (!cleanName || cleanName.length < 2) {
+    return res.status(400).json({ success: false, message: 'Please provide your name.' });
+  }
+  if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+    return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+  }
+  if (!cleanMessage || cleanMessage.length < 10) {
+    return res.status(400).json({ success: false, message: 'Please write a message of at least 10 characters.' });
+  }
+
+  // Persist to Firestore via Admin SDK if available (never fails request if unavailable)
+  const { db: admDb, isConfigured } = getFirebaseAdmin();
+  if (isConfigured && admDb) {
+    try {
+      await admDb.collection('inquiries').add({
+        name: cleanName,
+        email: cleanEmail,
+        category: String(category || 'general'),
+        organization: String(organization || '').trim(),
+        handle: String(handle || '').trim(),
+        budgetOrReach: String(budgetOrReach || '').trim(),
+        message: cleanMessage,
+        status: 'new',
+        createdAt: Date.now(),
+      });
+    } catch (err) {
+      console.warn('[Inquiry] Firestore save note:', err?.message);
+    }
+  }
+
+  const emailResult = await sendInquiryNotificationEmail({
+    name: cleanName,
+    email: cleanEmail,
+    category: String(category || 'general'),
+    organization: String(organization || '').trim(),
+    handle: String(handle || '').trim(),
+    budgetOrReach: String(budgetOrReach || '').trim(),
+    message: cleanMessage,
+  });
+
+  if (!emailResult.sent && emailResult.reason === 'RESEND_API_KEY not configured') {
+    return res.json({
+      success: true,
+      sent: false,
+      autoReplySent: false,
+      message: 'Inquiry captured. Email dispatch awaits RESEND_API_KEY.',
+    });
+  }
+
+  if (!emailResult.sent) {
+    return res.status(502).json({
+      success: false,
+      message: emailResult.reason || 'Could not dispatch your inquiry email right now. Please email partnerships@addmeup.ng or message WhatsApp support.',
+    });
+  }
+
+  return res.json({
+    success: true,
+    sent: true,
+    autoReplySent: Boolean(emailResult.autoReplySent),
+    message: 'Your message has been delivered to our team and a confirmation was sent to your inbox.',
+  });
+});
+
+// ============================================================================
+// ADMIN: PERMANENT USER & AUTH DELETION (requires Firebase Admin SDK)
+// ============================================================================
+app.post('/api/admin/delete-user', async (req, res) => {
+  const { targetUid, targetEmail } = req.body || {};
+  if (!targetUid || typeof targetUid !== 'string') {
+    return res.status(400).json({ success: false, message: 'targetUid is required.' });
+  }
+
+  const { auth: admAuth, db: admDb, isConfigured } = getFirebaseAdmin();
+  if (!isConfigured || !admAuth || !admDb) {
+    return res.json({
+      success: false,
+      needsClientDeletion: true,
+      message: 'Firebase Admin SDK not configured on server; falling back to client Firestore cleanup.',
+    });
+  }
+
+  // Verify caller authorization via Firebase ID token or Google OAuth token
+  const authHeader = String(req.headers.authorization || '');
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const googleAccessToken = String(req.headers['x-google-access-token'] || '').trim();
+
+  let verifiedEmail = '';
+  let verifiedUid = '';
+
+  try {
+    if (bearerToken) {
+      try {
+        const decoded = await admAuth.verifyIdToken(bearerToken);
+        verifiedUid = decoded.uid || '';
+        verifiedEmail = String(decoded.email || '').trim().toLowerCase();
+      } catch {
+        // Fallback: check if bearerToken is a Google OAuth token
+        const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(bearerToken)}`);
+        if (infoRes.ok) {
+          const info = await infoRes.json();
+          if (info?.email) verifiedEmail = String(info.email).trim().toLowerCase();
+        }
+      }
+    }
+
+    if (!verifiedEmail && googleAccessToken) {
+      const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${googleAccessToken}` },
+      });
+      if (userRes.ok) {
+        const info = await userRes.json();
+        if (info?.email) verifiedEmail = String(info.email).trim().toLowerCase();
+      }
+    }
+
+    if (!verifiedUid && !verifiedEmail) {
+      return res.status(401).json({ success: false, message: 'Unauthorized: valid admin session token required.' });
+    }
+
+    // Confirm caller is an admin in Firestore or super-admin owner
+    let isCallerAdmin = verifiedEmail === 'heisgag1@gmail.com';
+    if (!isCallerAdmin && verifiedUid) {
+      const callerSnap = await admDb.collection('users').doc(verifiedUid).get();
+      if (callerSnap.exists && callerSnap.data()?.isAdmin) isCallerAdmin = true;
+    }
+    if (!isCallerAdmin && verifiedEmail) {
+      const emailAdminSnap = await admDb.collection('users').where('email', '==', verifiedEmail).get();
+      emailAdminSnap.forEach((d) => {
+        if (d.data()?.isAdmin) isCallerAdmin = true;
+      });
+    }
+
+    if (!isCallerAdmin) {
+      return res.status(403).json({ success: false, message: 'Forbidden: administrator privileges required.' });
+    }
+
+    const normalizedTargetEmail = String(targetEmail || '').trim().toLowerCase();
+    if (
+      targetUid === verifiedUid ||
+      normalizedTargetEmail === 'heisgag1@gmail.com' ||
+      (normalizedTargetEmail && normalizedTargetEmail === verifiedEmail)
+    ) {
+      return res.status(400).json({ success: false, message: 'Cannot delete the super-admin or your active admin account.' });
+    }
+
+    // Gather all candidate UIDs & email records for this user
+    const candidateUids = new Set([targetUid]);
+    const emailsToCheck = new Set();
+    if (normalizedTargetEmail && normalizedTargetEmail.includes('@')) {
+      emailsToCheck.add(normalizedTargetEmail);
+    }
+
+    const rootUserSnap = await admDb.collection('users').doc(targetUid).get();
+    if (rootUserSnap.exists) {
+      const uData = rootUserSnap.data();
+      if (uData?.canonicalUid) candidateUids.add(uData.canonicalUid);
+      if (uData?.linkedOriginalUid) candidateUids.add(uData.linkedOriginalUid);
+      if (uData?.email) emailsToCheck.add(String(uData.email).trim().toLowerCase());
+    }
+
+    for (const emailAddr of emailsToCheck) {
+      const linkedSnap = await admDb.collection('users').where('email', '==', emailAddr).get();
+      linkedSnap.forEach((d) => candidateUids.add(d.id));
+    }
+
+    // Collect every Firestore document reference owned by any candidate UID
+    const docRefsMap = new Map();
+    const trackSnap = (snap) => {
+      snap.forEach((d) => {
+        docRefsMap.set(d.ref.path, d.ref);
+      });
+    };
+
+    for (const uid of candidateUids) {
+      docRefsMap.set(`users/${uid}`, admDb.collection('users').doc(uid));
+      docRefsMap.set(`support_chats/${uid}`, admDb.collection('support_chats').doc(uid));
+
+      const queries = [
+        admDb.collection('ads').where('userId', '==', uid).get(),
+        admDb.collection('claims').where('claimerUid', '==', uid).get(),
+        admDb.collection('claims').where('adOwnerUid', '==', uid).get(),
+        admDb.collection('transactions').where('userId', '==', uid).get(),
+        admDb.collection('notifications').where('userId', '==', uid).get(),
+        admDb.collection('ad_likes').where('userId', '==', uid).get(),
+        admDb.collection('reports').where('reporterUid', '==', uid).get(),
+        admDb.collection('reports').where('reportedUserId', '==', uid).get(),
+        admDb.collection('support_messages').where('userId', '==', uid).get(),
+        admDb.collection('support_chats').where('userId', '==', uid).get(),
+      ];
+
+      const snaps = await Promise.all(queries);
+      snaps.forEach(trackSnap);
+    }
+
+    // Delete all collected documents in batches of 400
+    const allRefs = Array.from(docRefsMap.values());
+    let deletedDocsCount = 0;
+    for (let i = 0; i < allRefs.length; i += 400) {
+      const chunk = allRefs.slice(i, i + 400);
+      const batch = admDb.batch();
+      chunk.forEach((ref) => batch.delete(ref));
+      await batch.commit();
+      deletedDocsCount += chunk.length;
+    }
+
+    // Delete Firebase Auth account(s) by UID and by email
+    const deletedAuthUids = new Set();
+    for (const uid of candidateUids) {
+      if (uid.startsWith('google_')) continue;
+      try {
+        await admAuth.deleteUser(uid);
+        deletedAuthUids.add(uid);
+      } catch (authErr) {
+        if (authErr?.code !== 'auth/user-not-found') {
+          console.warn(`[Admin Delete User] Auth delete note for UID ${uid}:`, authErr?.message);
+        }
+      }
+    }
+
+    for (const emailAddr of emailsToCheck) {
+      try {
+        const fbUser = await admAuth.getUserByEmail(emailAddr);
+        if (fbUser?.uid && !deletedAuthUids.has(fbUser.uid)) {
+          await admAuth.deleteUser(fbUser.uid);
+          deletedAuthUids.add(fbUser.uid);
+        }
+      } catch (emailErr) {
+        if (emailErr?.code !== 'auth/user-not-found') {
+          console.warn(`[Admin Delete User] Auth email delete note for ${emailAddr}:`, emailErr?.message);
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      deletedDocsCount,
+      authDeletedCount: deletedAuthUids.size,
+      deletedUids: Array.from(candidateUids),
+    });
+  } catch (err) {
+    console.error('[Admin Delete User] Error:', err);
+    return res.status(500).json({
+      success: false,
+      message: err?.message || 'Failed to delete user.',
+    });
+  }
 });
 
 // ============================================================================

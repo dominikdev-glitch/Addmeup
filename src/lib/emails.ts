@@ -175,3 +175,32 @@ export async function sendDiagnosticTestEmail(toEmail: string): Promise<{
   }
 }
 
+export interface ContactInquiryPayload {
+  name: string;
+  email: string;
+  category: 'partnership' | 'creator' | 'ambassador' | 'support' | 'billing' | 'general';
+  organization?: string;
+  handle?: string;
+  budgetOrReach?: string;
+  message: string;
+}
+
+export async function submitContactInquiry(payload: ContactInquiryPayload): Promise<{
+  success: boolean;
+  message?: string;
+  sent?: boolean;
+  autoReplySent?: boolean;
+}> {
+  const res = await fetch('/api/contact/inquiry', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.message || `Failed to submit inquiry (${res.status})`);
+  }
+  return data;
+}
+
+

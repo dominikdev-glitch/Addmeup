@@ -19,7 +19,8 @@ import {
   adminToggleAdPause,
   adminBoostAd,
   adminPermanentDeleteAd,
-  adminForceApproveClaim
+  adminForceApproveClaim,
+  adminPermanentDeleteUser
 } from '../lib/transactions';
 import { triggerHaptic } from '../lib/device';
 
@@ -482,6 +483,33 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     }
   };
 
+  const handleDeleteUser = async (targetUser: UserProfile) => {
+    try {
+      setActionInProgress(targetUser.uid);
+      const res = await adminPermanentDeleteUser(targetUser);
+      const removedUidSet = new Set(res.deletedUids);
+
+      setUsers(prev => prev.filter(u => !removedUidSet.has(u.uid)));
+      setAds(prev => prev.filter(a => !removedUidSet.has(a.userId)));
+      setClaims(prev => prev.filter(c => !removedUidSet.has(c.claimerUid) && !removedUidSet.has(c.adOwnerUid)));
+      setReports(prev => prev.filter(r => !removedUidSet.has(r.reporterUid)));
+      if (res.authDeleted) {
+        setTransactions(prev => prev.filter(t => !removedUidSet.has(t.userId)));
+      }
+
+      onToast(
+        res.authDeleted
+          ? `Deleted ${targetUser.username}: ${res.deletedDocsCount} docs & ${res.authDeletedCount} Auth record(s) removed`
+          : `Deleted ${res.deletedDocsCount} Firestore docs for ${targetUser.username} (Set FIREBASE_ADMIN_JSON on server to also delete Firebase Auth)`
+      );
+      triggerHaptic('warning');
+    } catch (err: any) {
+      onToast(`Failed to delete user: ${err.message}`);
+    } finally {
+      setActionInProgress(null);
+    }
+  };
+
   // Ad Actions
   const handleTogglePauseAd = async (ad: Ad) => {
     try {
@@ -627,9 +655,11 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           {activeTab === 'users' && (
             <AdminUsersPage
               users={users}
+              currentProfile={currentProfile}
               onToggleAdmin={handleToggleAdmin}
               onToggleBan={handleToggleBan}
               onAdjustCredits={handleAdjustCredits}
+              onDeleteUser={handleDeleteUser}
               actionInProgress={actionInProgress}
               onToast={onToast}
             />

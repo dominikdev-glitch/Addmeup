@@ -1,5 +1,11 @@
 import React from 'react';
 import { Logo } from './Logo';
+import {
+  OFFICIAL_EMAILS,
+  OFFICIAL_WHATSAPP_NUMBER,
+  OFFICIAL_WHATSAPP_URL,
+  PublicPageId,
+} from '../lib/contactConfig';
 import { 
   ShieldCheck, 
   Zap, 
@@ -10,6 +16,7 @@ import {
 interface LandingPageProps {
   onSignInGoogle: () => void;
   onOpenAuthModal: () => void;
+  onNavigatePage?: (page: PublicPageId) => void;
   onOpenPrivacy?: () => void;
   onOpenTerms?: () => void;
 }
@@ -17,30 +24,84 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({
   onSignInGoogle,
   onOpenAuthModal,
+  onNavigatePage,
   onOpenPrivacy,
   onOpenTerms,
 }) => {
+  const handlePublicLink = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    page: PublicPageId
+  ) => {
+    if (onNavigatePage) {
+      e.preventDefault();
+      onNavigatePage(page);
+      return;
+    }
+    if (page === 'privacy' && onOpenPrivacy) {
+      e.preventDefault();
+      onOpenPrivacy();
+    } else if (page === 'terms' && onOpenTerms) {
+      e.preventDefault();
+      onOpenTerms();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#fffaf0] text-slate-800 flex flex-col selection:bg-orange-500 selection:text-white">
       
       {/* Public Header */}
       <header className="sticky top-0 z-40 glass-header text-slate-800 shadow-xs border-b border-orange-100/80">
-        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-3.5 flex items-center justify-between gap-6">
           
-          {/* Logo */}
-          <Logo size="md" showText={true} subtitle="HANDLE EXCHANGE" />
+          {/* Zone 1: Brand Logo */}
+          <Logo size="md" showText={true} />
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          {/* Zone 2: Clean Single-Line Nav Links */}
+          <nav
+            aria-label="Public Navigation"
+            className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600"
+          >
+            <a
+              href="/about"
+              onClick={(e) => handlePublicLink(e, 'about')}
+              className="whitespace-nowrap shrink-0 hover:text-slate-900 hover:underline underline-offset-4 transition-colors"
+            >
+              About
+            </a>
+            <a
+              href="/partnership"
+              onClick={(e) => handlePublicLink(e, 'partnership')}
+              className="whitespace-nowrap shrink-0 hover:text-slate-900 hover:underline underline-offset-4 transition-colors"
+            >
+              Partnerships
+            </a>
+            <a
+              href="/faq"
+              onClick={(e) => handlePublicLink(e, 'faq')}
+              className="whitespace-nowrap shrink-0 hover:text-slate-900 hover:underline underline-offset-4 transition-colors"
+            >
+              FAQ
+            </a>
+            <a
+              href="/contact"
+              onClick={(e) => handlePublicLink(e, 'contact')}
+              className="whitespace-nowrap shrink-0 hover:text-slate-900 hover:underline underline-offset-4 transition-colors"
+            >
+              Contact
+            </a>
+          </nav>
+
+          {/* Zone 3: Action Buttons */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               onClick={onOpenAuthModal}
-              className="text-xs font-bold text-slate-700 hover:text-slate-900 px-3 py-2 transition-colors"
+              className="text-xs font-bold text-slate-700 hover:text-slate-900 px-3 py-2 transition-colors whitespace-nowrap shrink-0"
             >
               Sign In
             </button>
             <button
               onClick={onOpenAuthModal}
-              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-extrabold transition-all active:scale-95 shadow-md shadow-orange-500/20 flex items-center gap-1.5"
+              className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-xs font-extrabold transition-all active:scale-95 shadow-md shadow-orange-500/20 flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
               <span>Join Free</span>
             </button>
@@ -376,47 +437,132 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200/80 bg-white/40 py-6 text-center text-xs text-slate-500 font-medium space-y-2">
-        <div className="flex items-center justify-center gap-4 text-xs font-bold text-slate-700">
-          <a
-            href="https://addmeup.ng/privacy"
-            onClick={(e) => {
-              if (onOpenPrivacy) {
-                e.preventDefault();
-                onOpenPrivacy();
-              }
-            }}
-            className="hover:text-orange-600 underline transition-colors"
-          >
-            Privacy Policy
-          </a>
-          <span className="text-slate-300">•</span>
-          <a
-            href="https://addmeup.ng/terms"
-            onClick={(e) => {
-              if (onOpenTerms) {
-                e.preventDefault();
-                onOpenTerms();
-              }
-            }}
-            className="hover:text-orange-600 underline transition-colors"
-          >
-            Terms of Service
-          </a>
-          <span className="text-slate-300">•</span>
-          <a
-            href="https://wa.me/2349040464774?text=Hello%20AddMeUp%20Support"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-orange-600 underline transition-colors"
-          >
-            WhatsApp Support (+234 904 046 4774)
-          </a>
+      <footer className="border-t border-slate-200/80 bg-white/70 text-slate-600">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 pb-8 border-b border-slate-200/80">
+            <div className="space-y-3">
+              <Logo size="sm" showText={true} />
+              <p className="text-xs leading-relaxed text-slate-500">
+                Social discovery and handle exchange platform for Snapchat and WhatsApp communities across Nigeria and beyond.
+              </p>
+              <a
+                href="mailto:hello@addmeup.ng"
+                className="inline-block text-xs font-bold text-orange-600 hover:underline"
+              >
+                hello@addmeup.ng
+              </a>
+            </div>
+
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-extrabold text-slate-900">Company &amp; Growth</h3>
+              <ul className="space-y-2 text-xs font-medium">
+                <li>
+                  <a
+                    href="/about"
+                    onClick={(e) => handlePublicLink(e, 'about')}
+                    className="hover:text-orange-600 transition-colors"
+                  >
+                    About Us
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="/partnership"
+                    onClick={(e) => handlePublicLink(e, 'partnership')}
+                    className="hover:text-orange-600 transition-colors"
+                  >
+                    Partnerships &amp; Sponsors
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="/faq"
+                    onClick={(e) => handlePublicLink(e, 'faq')}
+                    className="hover:text-orange-600 transition-colors"
+                  >
+                    Help Center &amp; FAQ
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="/contact"
+                    onClick={(e) => handlePublicLink(e, 'contact')}
+                    className="hover:text-orange-600 transition-colors"
+                  >
+                    Contact Support
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-extrabold text-slate-900">Official Emails</h3>
+              <ul className="space-y-2 text-xs font-medium">
+                {OFFICIAL_EMAILS.slice(0, 4).map((desk) => (
+                  <li key={desk.id}>
+                    <a
+                      href={`mailto:${desk.address}`}
+                      className="font-semibold text-slate-700 hover:text-orange-600 transition-colors"
+                    >
+                      {desk.address}
+                    </a>
+                    <span className="text-slate-400"> · {desk.label.split('&')[0].trim()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="space-y-2.5">
+              <h3 className="text-xs font-extrabold text-slate-900">Legal &amp; Support</h3>
+              <ul className="space-y-2 text-xs font-medium">
+                <li>
+                  <a
+                    href="https://addmeup.ng/privacy"
+                    onClick={(e) => handlePublicLink(e, 'privacy')}
+                    className="hover:text-orange-600 transition-colors"
+                  >
+                    Privacy Policy
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://addmeup.ng/terms"
+                    onClick={(e) => handlePublicLink(e, 'terms')}
+                    className="hover:text-orange-600 transition-colors"
+                  >
+                    Terms of Service
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="mailto:security@addmeup.ng"
+                    className="hover:text-orange-600 transition-colors"
+                  >
+                    security@addmeup.ng (Abuse / Security)
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href={OFFICIAL_WHATSAPP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-700 font-semibold hover:underline"
+                  >
+                    WhatsApp Support ({OFFICIAL_WHATSAPP_NUMBER})
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-500">
+            <p>AddMeUp © {new Date().getFullYear()} · Social Handle Exchange Platform (addmeup.ng)</p>
+            <p className="text-slate-400">Snapchat and WhatsApp are trademarks of their respective owners.</p>
+          </div>
         </div>
-        <p>AddMeUp © {new Date().getFullYear()} • Social Handle Exchange Platform (addmeup.ng)</p>
-        <p className="text-[11px] text-slate-400">Snapchat and WhatsApp are trademarks of their respective owners.</p>
       </footer>
 
     </div>
   );
 };
+
