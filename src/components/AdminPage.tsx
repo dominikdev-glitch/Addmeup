@@ -111,8 +111,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     try {
       setLoading(true);
 
-      // Fetch users
-      const usersSnap = await getDocs(query(collection(db, 'users'), limit(150)));
+      // Fetch users (higher limit so financial ledger user-existence & admin checks are complete)
+      const usersSnap = await getDocs(query(collection(db, 'users'), limit(500)));
       const loadedUsers: UserProfile[] = usersSnap.docs.map(d => {
         const data = d.data();
         return {
@@ -186,7 +186,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
 
       // Fetch transactions for real revenue and profit accounting
       try {
-        const transSnap = await getDocs(query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(200)));
+        const transSnap = await getDocs(query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500)));
         const loadedTransactions: Transaction[] = transSnap.docs.map(d => {
           const data = d.data();
           return {
@@ -299,36 +299,125 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     };
   }, [users, ads, claims, reports]);
 
-  // Real Financial & Profit Accounting (Live fiat money transactions ONLY)
+  // Real Financial & Profit Accounting (Live customer fiat deposits ONLY)
+  // Strictly excludes: deleted accounts, admin & admin-linked accounts, sandbox/fake/non-Paystack entries, and multi-UID duplicates
   const financialStats = useMemo(() => {
     const depositTransactions = transactions.filter(t => t.type === 'deposit');
 
-    // Filter strictly for live production deposits (exclude sandbox / preview tests)
-    const liveDeposits = depositTransactions.filter(t => {
+    const usersByUid = new Map<string, UserProfile>();
+    users.forEach(u => {
+      usersByUid.set(u.uid, u);
+    });
+
+    const adminEmails = new Set<string>(['heisgag1@gmail.com']);
+    const adminUidSet = new Set<string>();
+    users.forEach(u => {
+      const emailLower = (u.email || '').trim().toLowerCase();
+      if (u.isAdmin || adminEmails.has(emailLower)) {
+        adminUidSet.add(u.uid);
+        if (u.canonicalUid) adminUidSet.add(u.canonicalUid);
+        if (u.linkedOriginalUid) adminUidSet.add(u.linkedOriginalUid);
+        if (emailLower) adminEmails.add(emailLower);
+      }
+    });
+    // Propagate admin status across any linked accounts
+    users.forEach(u => {
+      const emailLower = (u.email || '').trim().toLowerCase();
+      if (
+        adminEmails.has(emailLower) ||
+        (u.canonicalUid && adminUidSet.has(u.canonicalUid)) ||
+        (u.linkedOriginalUid && adminUidSet.has(u.linkedOriginalUid))
+      ) {
+        adminUidSet.add(u.uid);
+      }
+    });
+
+    // Collect references touched by admin accounts or deleted accounts so linked copies are excluded too
+    const adminSharedRefs = new Set<string>();
+    const deletedSharedRefs = new Set<string>();
+    depositTransactions.forEach(t => {
+      if (!t.referenceId) return;
+      if (adminUidSet.has(t.userId)) {
+        adminSharedRefs.add(t.referenceId);
+      }
+      if (!usersByUid.has(t.userId)) {
+        deletedSharedRefs.add(t.referenceId);
+      }
+    });
+
+    const liveDeposits: Transaction[] = [];
+    const seenRefs = new Set<string>();
+    let excludedDeletedCount = 0;
+    let excludedDeletedNgn = 0;
+    let excludedAdminCount = 0;
+    let excludedAdminNgn = 0;
+    let excludedTestOrDupCount = 0;
+
+    for (const t of depositTransactions) {
+      const amt = Number(t.amountNgn || 0);
+      if (amt <= 0) {
+        excludedTestOrDupCount += 1;
+        continue;
+      }
+
+      // 1. Exclude deleted user accounts (UID no longer in users collection)
+      if (!usersByUid.has(t.userId)) {
+        excludedDeletedCount += 1;
+        excludedDeletedNgn += amt;
+        continue;
+      }
+
+      // 2. Exclude admin accounts and any deposit references linked to an admin
+      if (adminUidSet.has(t.userId) || (t.referenceId && adminSharedRefs.has(t.referenceId))) {
+        excludedAdminCount += 1;
+        excludedAdminNgn += amt;
+        continue;
+      }
+
+      // 3. Exclude sandbox tests, non-Paystack fake/manual entries, and clones of deleted-account tests
       const method = (t.paymentMethod || '').toLowerCase();
       const ref = (t.referenceId || '').toLowerCase();
       const desc = (t.description || '').toLowerCase();
-      const isTestOrSandbox = 
-        method.includes('sandbox') || 
-        ref.includes('test') || 
-        desc.includes('sandbox');
-      return !isTestOrSandbox && Number(t.amountNgn || 0) > 0;
-    });
+      const isNonPaystack = !method.includes('paystack') && !ref.includes('pstk');
+      const isFakeOrSandbox =
+        method.includes('sandbox') ||
+        ref.includes('test') ||
+        desc.includes('sandbox') ||
+        isNonPaystack ||
+        Boolean(t.referenceId && deletedSharedRefs.has(t.referenceId)) ||
+        t.transactionId.endsWith('-copy');
+
+      if (isFakeOrSandbox) {
+        excludedAdminCount += 1;
+        excludedAdminNgn += amt;
+        continue;
+      }
+
+      // 4. Deduplicate across linked UIDs so each unique Paystack payment counts only once
+      const dedupeKey = t.referenceId || t.transactionId;
+      if (seenRefs.has(dedupeKey)) {
+        excludedTestOrDupCount += 1;
+        continue;
+      }
+      seenRefs.add(dedupeKey);
+      liveDeposits.push(t);
+    }
 
     const grossRevenueNgn = liveDeposits.reduce((acc, t) => acc + Number(t.amountNgn || 0), 0);
     const paidCreditsIssued = liveDeposits.reduce((acc, t) => acc + Number(t.amount || 0), 0);
 
     // Paystack standard fee: 1.5% + NGN 100 for transactions >= NGN 2,500 (capped at NGN 2,000 per tx)
-    const paystackFeesNgn = liveDeposits.reduce((acc, t) => {
+    const rawPaystackFeesNgn = liveDeposits.reduce((acc, t) => {
       const amt = Number(t.amountNgn || 0);
       let fee = amt * 0.015;
       if (amt >= 2500) fee += 100;
       return acc + Math.min(fee, 2000);
     }, 0);
 
-    const netProfitNgn = Math.max(0, grossRevenueNgn - paystackFeesNgn);
+    const paystackFeesNgn = Math.round(rawPaystackFeesNgn * 100) / 100;
+    const netProfitNgn = Math.max(0, Math.round((grossRevenueNgn - paystackFeesNgn) * 100) / 100);
     const averageDepositNgn = liveDeposits.length > 0 ? Math.round(grossRevenueNgn / liveDeposits.length) : 0;
-    const testDepositsCount = depositTransactions.length - liveDeposits.length;
+    const excludedDepositsCount = depositTransactions.length - liveDeposits.length;
 
     return {
       grossRevenueNgn,
@@ -337,10 +426,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       liveDepositsCount: liveDeposits.length,
       paidCreditsIssued,
       averageDepositNgn,
-      testDepositsCount,
+      testDepositsCount: excludedDepositsCount,
+      excludedDepositsCount,
+      excludedDeletedCount,
+      excludedDeletedNgn,
+      excludedAdminCount,
+      excludedAdminNgn,
+      excludedTestOrDupCount,
       liveDeposits,
     };
-  }, [transactions]);
+  }, [transactions, users]);
 
   // User Actions
   const handleToggleAdmin = async (targetUser: UserProfile) => {
@@ -524,6 +619,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           {activeTab === 'finances' && (
             <AdminFinancesPage
               financialStats={financialStats}
+              users={users}
               onToast={onToast}
             />
           )}
@@ -578,7 +674,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           )}
 
           {activeTab === 'settings' && (
-            <AdminSettingsPage />
+            <AdminSettingsPage
+              currentProfile={currentProfile}
+              onToast={onToast}
+            />
           )}
         </main>
       </div>

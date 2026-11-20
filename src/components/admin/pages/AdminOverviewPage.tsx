@@ -40,6 +40,7 @@ interface AdminOverviewPageProps {
     liveDepositsCount: number;
     paidCreditsIssued: number;
     averageDepositNgn: number;
+    excludedDepositsCount?: number;
   };
   users: UserProfile[];
   ads: Ad[];
@@ -83,11 +84,11 @@ export const AdminOverviewPage: React.FC<AdminOverviewPageProps> = ({
             </div>
 
             <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              Total verified customer deposits. Estimated Net Profit after processing fees is{' '}
+              Total verified customer deposits (excluding deleted accounts &amp; admin/test entries). Estimated Net Profit after processing fees is{' '}
               <strong className="text-white font-mono font-black">
                 ₦{financialStats.netProfitNgn.toLocaleString('en-NG')}
               </strong>{' '}
-              across {financialStats.liveDepositsCount} customer transactions.
+              across {financialStats.liveDepositsCount} live customer transactions.
             </p>
           </div>
 

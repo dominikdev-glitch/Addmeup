@@ -34,6 +34,7 @@ export default function App() {
     signInWithEmail,
     signUpWithEmail,
     sendPasswordReset,
+    changePassword,
     signOut,
     updateHandles,
   } = useAuth();
@@ -480,6 +481,8 @@ export default function App() {
           profile={profile}
           onClose={() => setShowProfileModal(false)}
           onUpdateHandles={updateHandles}
+          onChangePassword={changePassword}
+          onSendPasswordReset={sendPasswordReset}
           onSignOut={signOut}
           onToast={showToast}
           onOpenAdmin={() => setActiveTab('admin')}

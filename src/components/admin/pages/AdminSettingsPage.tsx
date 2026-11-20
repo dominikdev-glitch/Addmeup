@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Settings, 
   Coins, 
@@ -11,11 +11,95 @@ import {
   Copy,
   Check,
   KeyRound,
-  Zap
+  Zap,
+  Mail,
+  Send,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
+import { UserProfile } from '../../../types';
+import { sendDiagnosticTestEmail } from '../../../lib/emails';
 
-export const AdminSettingsPage: React.FC = () => {
+interface AdminSettingsPageProps {
+  currentProfile?: UserProfile;
+  onToast?: (msg: string) => void;
+}
+
+export const AdminSettingsPage: React.FC<AdminSettingsPageProps> = ({
+  currentProfile,
+  onToast,
+}) => {
   const [copiedDomain, setCopiedDomain] = useState<string | null>(null);
+  const [healthStatus, setHealthStatus] = useState<{
+    loading: boolean;
+    resendEmail?: boolean;
+    firebaseAdmin?: boolean;
+    hasPaystackSecret?: boolean;
+    serverReachable?: boolean;
+  }>({ loading: true });
+
+  const [testEmailTo, setTestEmailTo] = useState(currentProfile?.email || 'heisgag1@gmail.com');
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/health')
+      .then(async (r) => {
+        const text = await r.text();
+        const data = JSON.parse(text);
+        if (active) {
+          setHealthStatus({
+            loading: false,
+            resendEmail: Boolean(data.resendEmail),
+            firebaseAdmin: Boolean(data.firebaseAdmin),
+            hasPaystackSecret: Boolean(data.hasPaystackSecret),
+            serverReachable: true,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setHealthStatus({ loading: false, serverReachable: false });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleSendTestEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testEmailTo.trim() || !testEmailTo.includes('@')) {
+      setTestResult({ ok: false, message: 'Enter a valid email address.' });
+      return;
+    }
+    setSendingTest(true);
+    setTestResult(null);
+    try {
+      const res = await sendDiagnosticTestEmail(testEmailTo.trim());
+      if (res.success || res.sent) {
+        const msg = `Test email sent to ${testEmailTo.trim()}${res.id ? ` (ID: ${res.id})` : ''}. Check inbox or spam folder.`;
+        setTestResult({ ok: true, message: msg });
+        onToast?.('Test email sent via Resend!');
+      } else {
+        const reason = res.reason || res.message || 'RESEND_API_KEY not configured on the server.';
+        setTestResult({
+          ok: false,
+          message: reason === 'RESEND_API_KEY not configured'
+            ? 'RESEND_API_KEY is missing in your server environment variables. Add RESEND_API_KEY on Render (or AI Studio secrets) and redeploy.'
+            : reason,
+        });
+      }
+    } catch (err: any) {
+      setTestResult({ ok: false, message: err?.message || 'Failed to contact email API.' });
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   const copyText = (text: string) => {
     navigator.clipboard?.writeText(text);
@@ -28,6 +112,106 @@ export const AdminSettingsPage: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl">
+      {/* Resend Transactional Email Diagnostics & Test Dispatch */}
+      <div className="bg-slate-900 border border-emerald-500/30 rounded-3xl p-6 sm:p-7 space-y-5 shadow-lg shadow-emerald-500/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+              <Mail className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-white">Resend Transactional Emails (addmeup.ng)</h3>
+              <p className="text-xs text-slate-400">
+                Live server readiness check &amp; 1-click delivery test from <code className="text-emerald-300">noreply@addmeup.ng</code>
+              </p>
+            </div>
+          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-black w-fit ${
+              healthStatus.loading
+                ? 'bg-slate-800 border-slate-700 text-slate-300'
+                : healthStatus.resendEmail
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+            }`}
+          >
+            {healthStatus.loading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : healthStatus.resendEmail ? (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            ) : (
+              <AlertCircle className="w-3.5 h-3.5" />
+            )}
+            <span>
+              {healthStatus.loading
+                ? 'Checking Server...'
+                : healthStatus.resendEmail
+                ? 'RESEND_API_KEY Active'
+                : 'RESEND_API_KEY Not Set in Env'}
+            </span>
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
+            <span className="text-slate-400 font-semibold">Express Backend</span>
+            <span className={`font-black ${healthStatus.serverReachable ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {healthStatus.loading ? '...' : healthStatus.serverReachable ? 'Connected' : 'Unreachable'}
+            </span>
+          </div>
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
+            <span className="text-slate-400 font-semibold">RESEND_API_KEY</span>
+            <span className={`font-black ${healthStatus.resendEmail ? 'text-emerald-400' : 'text-amber-300'}`}>
+              {healthStatus.loading ? '...' : healthStatus.resendEmail ? 'Configured' : 'Missing'}
+            </span>
+          </div>
+          <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between">
+            <span className="text-slate-400 font-semibold">Firebase Admin (Reset Links)</span>
+            <span className={`font-black ${healthStatus.firebaseAdmin ? 'text-emerald-400' : 'text-slate-400'}`}>
+              {healthStatus.loading ? '...' : healthStatus.firebaseAdmin ? 'Active' : 'Client Fallback'}
+            </span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSendTestEmail} className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <input
+              type="email"
+              value={testEmailTo}
+              onChange={(e) => setTestEmailTo(e.target.value)}
+              placeholder="Recipient email (e.g. heisgag1@gmail.com)"
+              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+            <button
+              type="submit"
+              disabled={sendingTest}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-black text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+            >
+              {sendingTest ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              <span>{sendingTest ? 'Sending...' : 'Send Test Email'}</span>
+            </button>
+          </div>
+
+          {testResult && (
+            <div
+              className={`rounded-xl px-3.5 py-2.5 text-xs border ${
+                testResult.ok
+                  ? 'bg-emerald-950/60 border-emerald-500/30 text-emerald-300'
+                  : 'bg-amber-950/60 border-amber-500/30 text-amber-200'
+              }`}
+            >
+              {testResult.message}
+            </div>
+          )}
+
+          {!healthStatus.loading && !healthStatus.resendEmail && (
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Next step: Copy your <strong className="text-slate-200">re_...</strong> API key from Resend Dashboard → API Keys and add it as <code className="text-amber-300">RESEND_API_KEY</code> in your Render Environment Variables (then redeploy <code className="text-slate-200">addmeup.ng</code>). Welcome, Deposit Receipt, Withdrawal, Password Reset, and Password Change emails will automatically send.
+            </p>
+          )}
+        </form>
+      </div>
+
       {/* Google Authentication & Firebase Console Setup */}
       <div className="bg-slate-900 border border-orange-500/30 rounded-3xl p-6 sm:p-7 space-y-5 shadow-lg shadow-orange-500/5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

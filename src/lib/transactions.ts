@@ -23,6 +23,7 @@ import {
   AdReport
 } from '../types';
 import { sendNotification } from './notifications';
+import { notifyDepositEmail } from './emails';
 
 export const AD_DURATIONS: AdDurationConfig[] = [
   { id: '6h', label: '6 Hours', durationHours: 6, costCredits: 100 },
@@ -658,7 +659,7 @@ export async function processCreditDeposit(params: {
     return { success: true, newBalance };
   });
 
-  // Send notification to user
+  // Send notification & deduplicated Resend email receipt to user
   if (res.success) {
     sendNotification({
       userId,
@@ -668,6 +669,16 @@ export async function processCreditDeposit(params: {
       linkTab: 'wallet',
       meta: { referenceId, credits, amountNgn },
     }).catch(console.error);
+
+    if (userEmail) {
+      notifyDepositEmail({
+        toEmail: userEmail,
+        amountNgn,
+        credits,
+        reference: referenceId,
+        paymentMethod,
+      }).catch(() => {});
+    }
   }
 
   return res;

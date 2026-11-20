@@ -12,6 +12,14 @@ import {
   PAYSTACK_PUBLIC_KEY,
   PAYSTACK_SECRET_KEY
 } from './server/paystackService.js';
+import {
+  sendWelcomeEmail,
+  sendDepositConfirmationEmail,
+  sendWithdrawalConfirmationEmail,
+  sendPasswordResetResendEmail,
+  sendPasswordChangedEmail,
+  sendTestResendEmail,
+} from './server/emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +60,125 @@ app.get('/api/health', (_req, res) => {
     firebaseAdmin: getFirebaseAdmin().isConfigured,
     hasPaystackSecret: Boolean(activeSecretKey),
     nativeGoogleOAuth: googleOAuth.isConfigured,
+    resendEmail: Boolean((process.env.RESEND_API_KEY || '').trim()),
+  });
+});
+
+// ============================================================================
+// TRANSACTIONAL EMAILS VIA RESEND (addmeup.ng)
+// ============================================================================
+
+app.post('/api/email/welcome', async (req, res) => {
+  const { toEmail, userName, referralCode } = req.body || {};
+  if (!toEmail || !String(toEmail).includes('@')) {
+    return res.status(400).json({ success: false, message: 'Valid toEmail is required.' });
+  }
+  const result = await sendWelcomeEmail({ toEmail, userName, referralCode });
+  return res.json({ success: Boolean(result.sent), ...result });
+});
+
+app.post('/api/email/deposit', async (req, res) => {
+  const { toEmail, amountNgn, credits, reference, paymentMethod, userName } = req.body || {};
+  if (!toEmail || !reference) {
+    return res.status(400).json({ success: false, message: 'toEmail and reference are required.' });
+  }
+  const result = await sendDepositConfirmationEmail({
+    toEmail,
+    amountNgn: Number(amountNgn || 0),
+    credits: Number(credits || 0),
+    reference,
+    paymentMethod,
+    userName,
+  });
+  return res.json({ success: Boolean(result?.sent), ...result });
+});
+
+app.post('/api/email/withdrawal', async (req, res) => {
+  const { toEmail, userName, amountNgn, pointsDeducted, bankName, accountNumberMasked, reference, status } = req.body || {};
+  if (!toEmail || amountNgn === undefined) {
+    return res.status(400).json({ success: false, message: 'toEmail and amountNgn are required.' });
+  }
+  const result = await sendWithdrawalConfirmationEmail({
+    toEmail,
+    userName,
+    amountNgn: Number(amountNgn || 0),
+    pointsDeducted: Number(pointsDeducted || 0),
+    bankName,
+    accountNumberMasked,
+    reference,
+    status,
+  });
+  return res.json({ success: Boolean(result.sent), ...result });
+});
+
+app.post('/api/auth/password-reset', async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+  }
+
+  const hasResend = Boolean((process.env.RESEND_API_KEY || '').trim());
+  const { auth: admAuth, isConfigured } = getFirebaseAdmin();
+
+  // Require both Firebase Admin SDK (to generate official reset link) & Resend API Key
+  if (!hasResend || !isConfigured || !admAuth) {
+    return res.json({
+      success: false,
+      fallbackToFirebaseClient: true,
+      message: 'Server reset email not configured; using Firebase default.',
+    });
+  }
+
+  try {
+    const resetLink = await admAuth.generatePasswordResetLink(email, {
+      url: 'https://addmeup.ng/',
+    });
+    const sentResult = await sendPasswordResetResendEmail({
+      toEmail: email,
+      resetLink,
+      userName: email.split('@')[0],
+    });
+    if (!sentResult.sent) {
+      return res.json({
+        success: false,
+        fallbackToFirebaseClient: true,
+        message: sentResult.reason || 'Resend dispatch fallback.',
+      });
+    }
+    return res.json({ success: true, via: 'resend' });
+  } catch (err) {
+    console.warn('[Auth] Password reset link notice:', err?.code || err?.message);
+    if (err?.code === 'auth/user-not-found') {
+      return res.status(404).json({
+        success: false,
+        message: 'No password-based account found with this email. Try signing in with Google.',
+      });
+    }
+    return res.json({
+      success: false,
+      fallbackToFirebaseClient: true,
+      message: err?.message || 'Fallback to Firebase Auth email.',
+    });
+  }
+});
+
+app.post('/api/email/password-changed', async (req, res) => {
+  const { toEmail, userName } = req.body || {};
+  if (!toEmail || !String(toEmail).includes('@')) {
+    return res.status(400).json({ success: false, message: 'Valid toEmail is required.' });
+  }
+  const result = await sendPasswordChangedEmail({ toEmail, userName });
+  return res.json({ success: Boolean(result.sent), ...result });
+});
+
+app.post('/api/email/test', async (req, res) => {
+  const toEmail = String(req.body?.toEmail || 'heisgag1@gmail.com').trim();
+  const hasResendKey = Boolean((process.env.RESEND_API_KEY || '').trim());
+  const result = await sendTestResendEmail({ toEmail });
+  return res.json({
+    success: Boolean(result.sent),
+    hasResendKey,
+    ...result,
   });
 });
 
@@ -492,14 +619,37 @@ app.get(['/robots.txt', '/robots'], (_req, res) => {
   });
 });
 
-// Serve static assets from the dist directory
-app.use(express.static(path.join(__dirname, 'dist')));
+async function startServer() {
+  const isProd = process.env.NODE_ENV === 'production';
 
-// SPA fallback: redirect all unknown routes to index.html
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  if (isProd) {
+    // Serve built static assets from the dist directory in production
+    app.use(express.static(path.join(__dirname, 'dist')));
+
+    // SPA fallback: redirect all unknown routes to index.html
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    });
+  } else {
+    // Development mode (AI Studio preview / local): mount Vite middleware AFTER all /api/* routes
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR !== 'true',
+      },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 AddMeUp server listening on port ${PORT} (${isProd ? 'production' : 'development + Vite middleware'})`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start AddMeUp server:', err);
+  process.exit(1);
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 AddMeUp server listening on port ${PORT}`);
-});

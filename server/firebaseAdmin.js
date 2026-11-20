@@ -1,7 +1,9 @@
 import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 let db = null;
+let adminAuth = null;
 let isInitialized = false;
 
 /**
@@ -15,7 +17,7 @@ let isInitialized = false;
  */
 export function getFirebaseAdmin() {
   if (isInitialized && db) {
-    return { db, isConfigured: true };
+    return { db, auth: adminAuth, isConfigured: true };
   }
 
   const rawJson =
@@ -63,7 +65,7 @@ export function getFirebaseAdmin() {
     console.log(
       'ℹ️ [Firebase Admin] Detected Google OAuth 2.0 Client JSON in FIREBASE_ADMIN_JSON. Using it for Native Google Sign-In (addmeup.ng).'
     );
-    return { db: null, isConfigured: false };
+    return { db: null, auth: null, isConfigured: false };
   }
 
   if (serviceAccount && (serviceAccount.private_key || serviceAccount.privateKey)) {
@@ -84,19 +86,20 @@ export function getFirebaseAdmin() {
           : getApp();
 
       db = getFirestore(app, configDbId);
+      adminAuth = getAuth(app);
       isInitialized = true;
       console.log(
         `✅ [Firebase Admin] Successfully initialized with project: ${targetProjectId}, db: ${configDbId}`
       );
-      return { db, isConfigured: true };
+      return { db, auth: adminAuth, isConfigured: true };
     } catch (err) {
       console.error('[Firebase Admin] Error initializing Admin SDK:', err.message);
-      return { db: null, isConfigured: false, error: err.message };
+      return { db: null, auth: null, isConfigured: false, error: err.message };
     }
   }
 
   console.warn(
     '[Firebase Admin] No service account key found in environment (FIREBASE_ADMIN_JSON). Server running in verification-only mode.'
   );
-  return { db: null, isConfigured: false };
+  return { db: null, auth: null, isConfigured: false };
 }

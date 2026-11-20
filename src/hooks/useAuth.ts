@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   updateProfile as updateFirebaseProfile,
+  updatePassword as updateFirebasePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   signInWithCredential,
@@ -13,7 +16,6 @@ import {
   doc,
   onSnapshot,
   setDoc,
-  deleteDoc,
   collection,
   query,
   where,
@@ -24,15 +26,85 @@ import { auth, db } from '../lib/firebase';
 import { normalizeWhatsAppNumber } from '../lib/phone';
 import { UserProfile } from '../types';
 import { processReferralReward } from '../lib/transactions';
+import {
+  notifyWelcomeEmail,
+  requestBrandedPasswordReset,
+  notifyPasswordChangedEmail,
+} from '../lib/emails';
 
 const NATIVE_GOOGLE_CLIENT_ID =
   '1044686821961-lapatnenhljp67o2pcrulsj5sgmcnlle.apps.googleusercontent.com';
+
+const CACHED_FB_USER_KEY = 'addmeup_cached_fb_user';
+const VERIFIED_UID_PREFIX = 'addmeup_verified_uid_';
+const CANONICAL_MAP_PREFIX = 'addmeup_canonical_for_';
 
 export interface AuthUser {
   uid: string;
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
+}
+
+function isUidVerified(uid?: string | null): boolean {
+  if (!uid || typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(`${VERIFIED_UID_PREFIX}${uid}`) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markUidVerified(uid?: string | null) {
+  if (!uid || typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`${VERIFIED_UID_PREFIX}${uid}`, '1');
+  } catch {}
+}
+
+function getCanonicalUidForFbUid(fbUid?: string | null): string | null {
+  if (!fbUid || typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(`${CANONICAL_MAP_PREFIX}${fbUid}`);
+  } catch {
+    return null;
+  }
+}
+
+function saveCanonicalUidForFbUid(fbUid?: string | null, canonicalUid?: string | null) {
+  if (!fbUid || !canonicalUid || typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`${CANONICAL_MAP_PREFIX}${fbUid}`, canonicalUid);
+  } catch {}
+}
+
+function getCachedFbUser(): AuthUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(CACHED_FB_USER_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.uid) {
+      return {
+        uid: parsed.uid,
+        email: parsed.email || null,
+        displayName: parsed.displayName || null,
+        photoURL: parsed.photoURL || null,
+      };
+    }
+  } catch {}
+  return null;
+}
+
+function saveCachedFbUser(u: AuthUser | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (u) {
+      localStorage.setItem(CACHED_FB_USER_KEY, JSON.stringify(u));
+    } else {
+      localStorage.removeItem(CACHED_FB_USER_KEY);
+    }
+  } catch {}
 }
 
 // Check for any authentic Firebase Auth UID previously saved in local storage
@@ -141,11 +213,20 @@ function getStoredNativeGoogleUser(): AuthUser | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed && (parsed.uid || parsed.email)) {
-      const storedFbUid = getStoredFirebaseAuthUid();
-      const finalUid =
-        storedFbUid && !storedFbUid.startsWith('google_')
-          ? storedFbUid
-          : parsed.uid || `google_${parsed.sub || parsed.email}`;
+      const cachedUid = parsed.uid || `google_${parsed.sub || parsed.email}`;
+      // Preserve an already-verified canonical UID instead of blindly replacing google_* with a stray Firebase UID
+      let finalUid = cachedUid;
+      if (isUidVerified(cachedUid)) {
+        finalUid = cachedUid;
+      } else {
+        const storedFbUid = getStoredFirebaseAuthUid();
+        const mapped = storedFbUid ? getCanonicalUidForFbUid(storedFbUid) : null;
+        if (mapped) {
+          finalUid = mapped;
+        } else if (storedFbUid && !storedFbUid.startsWith('google_')) {
+          finalUid = storedFbUid;
+        }
+      }
 
       return {
         uid: finalUid,
@@ -163,6 +244,8 @@ function getStoredNativeGoogleUser(): AuthUser | null {
 function getInitialCachedUser(): AuthUser | null {
   const native = getStoredNativeGoogleUser();
   if (native) return native;
+  const cachedFb = getCachedFbUser();
+  if (cachedFb) return cachedFb;
   if (typeof window === 'undefined') return null;
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -211,14 +294,10 @@ export function useAuth() {
   const [profile, setProfile] = useState<UserProfile | null>(() =>
     getCachedProfile(getInitialCachedUser()?.uid)
   );
-  // Render immediately without blocking splash when a cached user exists OR for first-time visitors
-  const [loading, setLoading] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const cachedUser = getInitialCachedUser();
-    if (cachedUser) return false;
-    return localStorage.getItem('addmeup_has_account') === 'true';
-  });
+  // Never block startup with a splash screen when state is synchronously resolved
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const checkedRecoveryUidsRef = useRef<Set<string>>(new Set());
 
   const setUserIfChanged = useCallback((next: AuthUser | null) => {
     setUser((prev) => (sameAuthUser(prev, next) ? prev : next));
@@ -267,28 +346,28 @@ export function useAuth() {
       } catch (fbErr) {
         console.warn('Firebase Auth credential linking note:', fbErr);
       }
-    } else if (alreadyLinkedSameEmail && auth.currentUser?.uid && resolvedUid.startsWith('google_')) {
-      resolvedUid = auth.currentUser.uid;
+    } else if (alreadyLinkedSameEmail && auth.currentUser?.uid && resolvedUid.startsWith('google_') && !isUidVerified(resolvedUid)) {
+      const mapped = getCanonicalUidForFbUid(auth.currentUser.uid);
+      resolvedUid = mapped || auth.currentUser.uid;
     }
 
-    // 2. Look up existing Firestore user document only if UID is missing or provisional (google_*)
+    // 2. Look up existing Firestore user document only if UID is not yet verified as canonical
     const linkedUid = localStorage.getItem('addmeup_linked_firebase_uid');
     const needsLookup =
-      resolvedUid.startsWith('google_') || !linkedUid || linkedUid !== resolvedUid;
+      !isUidVerified(resolvedUid) &&
+      (resolvedUid.startsWith('google_') || !linkedUid || linkedUid !== resolvedUid);
     if (email && needsLookup) {
       const existing = await findBestExistingUserDoc(email);
       if (existing && existing.uid) {
         resolvedUid = existing.uid;
         localStorage.setItem('addmeup_linked_firebase_uid', resolvedUid);
+        markUidVerified(resolvedUid);
       }
     }
 
-    // 3. Check if an authentic Firebase Auth UID was cached previously in browser
-    if (resolvedUid.startsWith('google_')) {
-      const cachedFbUid = getStoredFirebaseAuthUid();
-      if (cachedFbUid) {
-        resolvedUid = cachedFbUid;
-      }
+    // 3. Check if an authentic Firebase Auth UID was mapped previously
+    if (auth.currentUser?.uid && resolvedUid) {
+      saveCanonicalUidForFbUid(auth.currentUser.uid, resolvedUid);
     }
 
     const finalUser: AuthUser = {
@@ -357,37 +436,49 @@ export function useAuth() {
     }
   }, [activateNativeGoogleUser]);
 
-  // Listen for Firebase Email/Password auth OR stored Native Google OAuth user
+  // Listen for Firebase Auth OR stored Native Google OAuth user (without redundant re-activation)
   useEffect(() => {
-    const fallbackTimer = setTimeout(() => {
-      setLoading(false);
-    }, 900);
-
-    // If a Native Google OAuth session exists in localStorage and its UID is provisional, resolve in background
     const storedGoogle = getStoredNativeGoogleUser();
-    if (storedGoogle && storedGoogle.uid.startsWith('google_')) {
+    if (storedGoogle && storedGoogle.uid.startsWith('google_') && !isUidVerified(storedGoogle.uid)) {
       activateNativeGoogleUser(storedGoogle);
     }
 
     const unsubAuth = onAuthStateChanged(auth, (firebaseUser) => {
-      clearTimeout(fallbackTimer);
       if (firebaseUser) {
+        // Check if this Firebase Auth UID already maps to an existing canonical Firestore user doc (e.g. google_...)
+        const mappedCanonical = getCanonicalUidForFbUid(firebaseUser.uid);
+        const currentNative = getStoredNativeGoogleUser();
+        const sameEmailNative =
+          currentNative &&
+          currentNative.email &&
+          firebaseUser.email &&
+          currentNative.email.toLowerCase() === firebaseUser.email.toLowerCase();
+
+        const effectiveUid =
+          mappedCanonical ||
+          (sameEmailNative && isUidVerified(currentNative!.uid) ? currentNative!.uid : firebaseUser.uid);
+
+        const nextAuthUser: AuthUser = {
+          uid: effectiveUid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || currentNative?.displayName || null,
+          photoURL: firebaseUser.photoURL || currentNative?.photoURL || null,
+        };
+
+        saveCachedFbUser(nextAuthUser);
+
         try {
-          localStorage.setItem('addmeup_linked_firebase_uid', firebaseUser.uid);
+          localStorage.setItem('addmeup_linked_firebase_uid', effectiveUid);
           localStorage.setItem('addmeup_has_account', 'true');
           if (firebaseUser.email) {
             localStorage.setItem('addmeup_saved_email', firebaseUser.email);
           }
         } catch {}
 
-        setUserIfChanged({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-        });
+        setUserIfChanged(nextAuthUser);
         setLoading(false);
       } else {
+        saveCachedFbUser(null);
         const currentNative = getStoredNativeGoogleUser();
         if (currentNative) {
           setUserIfChanged(currentNative);
@@ -400,7 +491,6 @@ export function useAuth() {
     });
 
     return () => {
-      clearTimeout(fallbackTimer);
       unsubAuth();
     };
   }, [activateNativeGoogleUser, setUserIfChanged]);
@@ -446,8 +536,14 @@ export function useAuth() {
         if (snapshot.exists()) {
           const data = snapshot.data();
 
-          // If current user.uid starts with 'google_' but an original account exists for this email, recover it!
-          if (user.uid.startsWith('google_') && (data.email || user.email)) {
+          // Run account deduplication recovery AT MOST ONCE per UID session (never on every snapshot)
+          if (
+            user.uid.startsWith('google_') &&
+            (data.email || user.email) &&
+            !isUidVerified(user.uid) &&
+            !checkedRecoveryUidsRef.current.has(user.uid)
+          ) {
+            checkedRecoveryUidsRef.current.add(user.uid);
             const emailToCheck = (data.email || user.email || '').trim();
             const existingAccount = await findBestExistingUserDoc(emailToCheck);
             if (existingAccount && existingAccount.uid !== user.uid) {
@@ -455,6 +551,10 @@ export function useAuth() {
                 `[Account Recovery] Migrating from duplicate (${user.uid}) to original account (${existingAccount.uid})`
               );
               localStorage.setItem('addmeup_linked_firebase_uid', existingAccount.uid);
+              markUidVerified(existingAccount.uid);
+              if (auth.currentUser?.uid) {
+                saveCanonicalUidForFbUid(auth.currentUser.uid, existingAccount.uid);
+              }
               const restoredUser: AuthUser = {
                 uid: existingAccount.uid,
                 email: emailToCheck || null,
@@ -464,15 +564,19 @@ export function useAuth() {
               localStorage.setItem('addmeup_native_google_user', JSON.stringify(restoredUser));
               setUserIfChanged(restoredUser);
               return;
+            } else {
+              markUidVerified(user.uid);
             }
+          } else {
+            markUidVerified(user.uid);
+          }
+
+          if (auth.currentUser?.uid && user.uid !== auth.currentUser.uid) {
+            saveCanonicalUidForFbUid(auth.currentUser.uid, user.uid);
           }
 
           const isAdmin = data.isAdmin === true || user.email === 'heisgag1@gmail.com';
           const isBanned = Boolean(data.isBanned);
-
-          if (data.isAdmin === undefined) {
-            setDoc(userRef, { isAdmin: false }, { merge: true }).catch(console.error);
-          }
 
           const liveProfile: UserProfile = {
             uid: user.uid,
@@ -500,14 +604,19 @@ export function useAuth() {
           setProfile(liveProfile);
         } else {
           // Document does NOT exist at this UID!
-          // STOP! Before creating a new document with 20 points, check if this email already exists anywhere in Firestore!
-          if (user.email) {
+          // Check once if this email already exists anywhere in Firestore before creating a new document
+          if (user.email && !checkedRecoveryUidsRef.current.has(user.uid)) {
+            checkedRecoveryUidsRef.current.add(user.uid);
             const existingAccount = await findBestExistingUserDoc(user.email);
             if (existingAccount && existingAccount.uid !== user.uid) {
               console.log(
                 `[Account Recovery] Found existing account (${existingAccount.uid}) for ${user.email}. Switching UID.`
               );
               localStorage.setItem('addmeup_linked_firebase_uid', existingAccount.uid);
+              markUidVerified(existingAccount.uid);
+              if (auth.currentUser?.uid) {
+                saveCanonicalUidForFbUid(auth.currentUser.uid, existingAccount.uid);
+              }
               const restoredUser: AuthUser = {
                 uid: existingAccount.uid,
                 email: user.email,
@@ -542,6 +651,16 @@ export function useAuth() {
           ).catch((err) => {
             console.warn('User document creation notice:', err);
           });
+          markUidVerified(user.uid);
+
+          if (user.email) {
+            notifyWelcomeEmail({
+              uid: user.uid,
+              email: user.email,
+              userName: user.displayName,
+              referralCode: myReferralCode,
+            }).catch(() => {});
+          }
 
           if (storedRef && storedRef !== user.uid && storedRef !== myReferralCode) {
             try {
@@ -800,14 +919,23 @@ export function useAuth() {
         localStorage.setItem('addmeup_saved_email', email.trim());
         localStorage.setItem('addmeup_last_login', Date.now().toString());
       } catch (e) {}
-      if (cred.user && username.trim()) {
-        try {
-          await updateFirebaseProfile(cred.user, {
-            displayName: username.trim(),
-          });
-        } catch (pErr) {
-          console.warn('Could not update display name:', pErr);
+      if (cred.user) {
+        if (username.trim()) {
+          try {
+            await updateFirebaseProfile(cred.user, {
+              displayName: username.trim(),
+            });
+          } catch (pErr) {
+            console.warn('Could not update display name:', pErr);
+          }
         }
+        const refCode = `UP-${cred.user.uid.slice(0, 6).toUpperCase()}`;
+        notifyWelcomeEmail({
+          uid: cred.user.uid,
+          email: cred.user.email || email.trim(),
+          userName: username.trim() || email.trim().split('@')[0],
+          referralCode: refCode,
+        }).catch(() => {});
       }
     } catch (err: any) {
       console.error('Email registration error:', err);
@@ -828,7 +956,15 @@ export function useAuth() {
   const sendPasswordReset = async (email: string) => {
     try {
       setError(null);
-      await sendPasswordResetEmail(auth, email.trim());
+      const cleanEmail = email.trim();
+      const branded = await requestBrandedPasswordReset(cleanEmail);
+      if (branded.handledByServer) {
+        return;
+      }
+      if (!branded.fallbackToFirebaseClient && branded.error) {
+        throw new Error(branded.error);
+      }
+      await sendPasswordResetEmail(auth, cleanEmail);
     } catch (err: any) {
       console.error('Password reset error:', err);
       if (err.code === 'auth/user-not-found') {
@@ -841,9 +977,56 @@ export function useAuth() {
     }
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    if (!auth.currentUser || !auth.currentUser.email) {
+      throw new Error('Password updates require an active email session. Use Forgot Password to set a password.');
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error('New password must be at least 6 characters long.');
+    }
+
+    const hasPasswordProvider = auth.currentUser.providerData?.some(
+      (p) => p.providerId === 'password'
+    );
+
+    try {
+      if (hasPasswordProvider && currentPassword) {
+        const credential = EmailAuthProvider.credential(auth.currentUser.email, currentPassword);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+      }
+      await updateFirebasePassword(auth.currentUser, newPassword);
+      notifyPasswordChangedEmail({
+        toEmail: auth.currentUser.email,
+        userName: auth.currentUser.displayName,
+      }).catch(() => {});
+    } catch (err: any) {
+      console.error('Change password error:', err);
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        throw new Error('Current password is incorrect.');
+      } else if (err.code === 'auth/requires-recent-login') {
+        throw new Error('For security, please sign out and sign back in (or use Send Reset Link) before changing your password.');
+      } else if (err.code === 'auth/weak-password') {
+        throw new Error('New password is too weak. Choose at least 6 characters.');
+      }
+      throw new Error(err.message || 'Could not update password.');
+    }
+  };
+
   const signOut = async () => {
     try {
       localStorage.removeItem('addmeup_native_google_user');
+      localStorage.removeItem(CACHED_FB_USER_KEY);
+      localStorage.removeItem('addmeup_linked_firebase_uid');
+      localStorage.removeItem('addmeup_google_id_token');
+      localStorage.removeItem('addmeup_google_access_token');
+      localStorage.removeItem('addmeup_has_account');
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith(VERIFIED_UID_PREFIX) || key.startsWith(CANONICAL_MAP_PREFIX))) {
+          localStorage.removeItem(key);
+        }
+      }
+      checkedRecoveryUidsRef.current.clear();
       setUser(null);
       setProfile(null);
       await firebaseSignOut(auth);
@@ -882,6 +1065,7 @@ export function useAuth() {
     signInWithEmail,
     signUpWithEmail,
     sendPasswordReset,
+    changePassword,
     signOut,
     updateHandles,
   };

@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { X, LogOut, Check, User, Save, ShieldAlert } from 'lucide-react';
+import { X, LogOut, User, Save, ShieldAlert, Lock, ChevronDown, ChevronUp, Mail } from 'lucide-react';
 import { PlatformIcon } from './PlatformIcon';
 import { AvatarPicker } from './AvatarPicker';
-import { normalizeWhatsAppNumber, parseSmartPhone, formatWhatsAppDisplay } from '../lib/phone';
+import { normalizeWhatsAppNumber, parseSmartPhone } from '../lib/phone';
 
 interface UserProfileModalProps {
   profile: UserProfile | null;
   onClose: () => void;
   onUpdateHandles: (snapchat: string, whatsapp: string, username?: string, photoUrl?: string) => Promise<void>;
+  onChangePassword?: (currentPassword: string, newPassword: string) => Promise<void>;
+  onSendPasswordReset?: (email: string) => Promise<void>;
   onSignOut: () => void;
   onToast: (msg: string) => void;
   onOpenAdmin?: () => void;
@@ -18,6 +20,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   profile,
   onClose,
   onUpdateHandles,
+  onChangePassword,
+  onSendPasswordReset,
   onSignOut,
   onToast,
   onOpenAdmin,
@@ -27,6 +31,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [snapchatHandle, setSnapchatHandle] = useState(profile?.snapchatHandle || '');
   const [whatsappNumber, setWhatsappNumber] = useState(profile?.whatsappNumber || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [showSecurity, setShowSecurity] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +49,42 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       console.error("Save profile error:", err);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!onChangePassword) return;
+    setPasswordNotice(null);
+    if (newPassword.length < 6) {
+      setPasswordNotice({ type: 'err', text: 'New password must be at least 6 characters.' });
+      return;
+    }
+    try {
+      setIsUpdatingPassword(true);
+      await onChangePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setPasswordNotice({ type: 'ok', text: 'Password updated! Security alert sent to your email.' });
+      onToast('Password updated! Security confirmation emailed.');
+    } catch (err: any) {
+      setPasswordNotice({ type: 'err', text: err?.message || 'Could not update password.' });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!onSendPasswordReset || !profile?.email) return;
+    setPasswordNotice(null);
+    try {
+      setIsUpdatingPassword(true);
+      await onSendPasswordReset(profile.email);
+      setPasswordNotice({ type: 'ok', text: `Reset link sent to ${profile.email}` });
+      onToast(`Password reset email sent to ${profile.email}`);
+    } catch (err: any) {
+      setPasswordNotice({ type: 'err', text: err?.message || 'Could not send reset link.' });
+    } finally {
+      setIsUpdatingPassword(false);
     }
   };
 
@@ -162,6 +207,72 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <span>{isSaving ? 'Saving...' : 'Save Profile'}</span>
           </button>
         </form>
+
+        {/* Password & Security Collapsible Section */}
+        {(onChangePassword || onSendPasswordReset) && (
+          <div className="mt-3 pt-3 border-t border-slate-200/60">
+            <button
+              type="button"
+              onClick={() => setShowSecurity((v) => !v)}
+              className="w-full py-2 px-3 bg-white/80 hover:bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 flex items-center justify-between transition-all"
+            >
+              <span className="flex items-center gap-2">
+                <Lock className="w-3.5 h-3.5 text-orange-500" />
+                <span>Password &amp; Security</span>
+              </span>
+              {showSecurity ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            {showSecurity && (
+              <div className="mt-2.5 p-3 rounded-xl bg-slate-50/90 border border-slate-200 space-y-2.5">
+                {passwordNotice && (
+                  <div className={`p-2 rounded-lg text-[11px] font-semibold ${passwordNotice.type === 'ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                    {passwordNotice.text}
+                  </div>
+                )}
+
+                {onChangePassword && (
+                  <>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Current password (if set)"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-orange-500"
+                    />
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="New password (min 6 chars)"
+                      className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800 focus:outline-none focus:border-orange-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={isUpdatingPassword}
+                      onClick={handlePasswordSubmit}
+                      className="w-full py-2 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all"
+                    >
+                      {isUpdatingPassword ? 'Updating...' : 'Update Password'}
+                    </button>
+                  </>
+                )}
+
+                {onSendPasswordReset && profile?.email && (
+                  <button
+                    type="button"
+                    disabled={isUpdatingPassword}
+                    onClick={handleSendResetEmail}
+                    className="w-full py-1.5 bg-white hover:bg-orange-50 border border-slate-200 text-orange-600 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    <Mail className="w-3 h-3" />
+                    <span>Email Password Reset Link</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Admin Dashboard Quick Launch for Admins */}
         {profile?.isAdmin && onOpenAdmin && (

@@ -14,7 +14,7 @@ import {
   Copy,
   Banknote
 } from 'lucide-react';
-import { Transaction } from '../../../types';
+import { Transaction, UserProfile } from '../../../types';
 import { AdminPagination } from '../AdminPagination';
 
 interface AdminFinancesPageProps {
@@ -26,19 +26,29 @@ interface AdminFinancesPageProps {
     paidCreditsIssued: number;
     averageDepositNgn: number;
     testDepositsCount: number;
+    excludedDepositsCount?: number;
+    excludedDeletedCount?: number;
+    excludedDeletedNgn?: number;
+    excludedAdminCount?: number;
+    excludedAdminNgn?: number;
     liveDeposits: Transaction[];
   };
+  users?: UserProfile[];
   onToast: (msg: string) => void;
 }
 
 export const AdminFinancesPage: React.FC<AdminFinancesPageProps> = ({
   financialStats,
+  users = [],
   onToast,
 }) => {
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'high_value'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 12;
+
+  const userMap = new Map<string, UserProfile>();
+  users.forEach(u => userMap.set(u.uid, u));
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -48,10 +58,13 @@ export const AdminFinancesPage: React.FC<AdminFinancesPageProps> = ({
   const filteredDeposits = financialStats.liveDeposits.filter(t => {
     if (search.trim()) {
       const q = search.toLowerCase();
+      const customer = userMap.get(t.userId);
       const matchRef = (t.referenceId || '').toLowerCase().includes(q);
       const matchUser = (t.userId || '').toLowerCase().includes(q);
+      const matchUsername = (customer?.username || '').toLowerCase().includes(q);
+      const matchEmail = (customer?.email || '').toLowerCase().includes(q);
       const matchDesc = (t.description || '').toLowerCase().includes(q);
-      if (!matchRef && !matchUser && !matchDesc) return false;
+      if (!matchRef && !matchUser && !matchUsername && !matchEmail && !matchDesc) return false;
     }
 
     if (filterType === 'high_value') {
@@ -83,7 +96,7 @@ export const AdminFinancesPage: React.FC<AdminFinancesPageProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
-              Real-time settlement profit calculations. Sandbox tests have been removed from accounting ledgers so your net margins reflect real revenue deposited through your Paystack account.
+              Real-time customer settlement profit calculations. Deleted accounts ({financialStats.excludedDeletedCount || 0}), admin/fake deposits ({financialStats.excludedAdminCount || 0}), sandbox tests, and duplicate entries are automatically removed so net margins reflect real customer revenue.
             </p>
           </div>
         </div>
@@ -219,7 +232,9 @@ export const AdminFinancesPage: React.FC<AdminFinancesPageProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-medium">
-              {paginatedDeposits.map((t) => (
+              {paginatedDeposits.map((t) => {
+                const customer = userMap.get(t.userId);
+                return (
                 <tr key={t.transactionId} className="hover:bg-slate-800/40 transition-colors">
                   <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
                     {new Date(t.createdAt).toLocaleString('en-US', {
@@ -232,17 +247,24 @@ export const AdminFinancesPage: React.FC<AdminFinancesPageProps> = ({
                   </td>
 
                   <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs text-slate-200" title={t.userId}>
-                        {t.userId.slice(0, 10)}...
-                      </span>
-                      <button
-                        onClick={() => copyToClipboard(t.userId, 'User UID')}
-                        className="text-slate-500 hover:text-white transition-colors"
-                        title="Copy User ID"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
+                    <div className="space-y-0.5">
+                      {customer && (
+                        <div className="text-xs font-bold text-white truncate max-w-[190px]">
+                          {customer.username} <span className="text-slate-400 font-normal">({customer.email || 'no email'})</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[11px] text-slate-400" title={t.userId}>
+                          {t.userId.slice(0, 12)}...
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(t.userId, 'User UID')}
+                          className="text-slate-500 hover:text-white transition-colors"
+                          title="Copy User ID"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
                   </td>
 
@@ -282,7 +304,8 @@ export const AdminFinancesPage: React.FC<AdminFinancesPageProps> = ({
                     </span>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
 
               {filteredDeposits.length === 0 && (
                 <tr>
